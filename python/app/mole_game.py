@@ -3,8 +3,8 @@ import time
 
 from dataclasses import dataclass, field
 
-from bugs import BUGS, Color
-from game import calculate_whack_order
+from app.bugs import BUGS, Color
+from app.game import calculate_whack_order
 
 
 # ============================================================
