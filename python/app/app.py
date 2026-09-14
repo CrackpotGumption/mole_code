@@ -12,7 +12,7 @@ from app.status_service import StatusService
 
 ARDUINO_PORT = os.environ.get(
     "ARDUINO_PORT",
-    "/dev/cu.usbmodem1101",
+    "/dev/cu.usbmodem101",
 )
 
 ARDUINO_BAUD = 115200
