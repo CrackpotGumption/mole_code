@@ -1,0 +1,10 @@
+docker run -d \
+  --name whac-game \
+  --restart unless-stopped \
+  --device=/dev/ttyACM0:/dev/ttyACM0 \
+  -e ARDUINO_PORT=/dev/ttyACM0 \
+  -p 8080:8080 \
+  whac-game
+
+
+  docker build -t whac-game .
