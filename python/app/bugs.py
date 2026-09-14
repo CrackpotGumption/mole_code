@@ -3,7 +3,7 @@ from enum import Enum
 
 
 # ============================================================
-# Trait values
+# ENUMS
 # ============================================================
 
 class Antennae(str, Enum):
@@ -45,7 +45,7 @@ class Color(str, Enum):
 
 
 # ============================================================
-# Bug definition
+# BUG DATA MODEL
 # ============================================================
 
 @dataclass(frozen=True)
@@ -61,57 +61,7 @@ class Bug:
 
 
 # ============================================================
-# Doctrine
-#
-# The QUEEN'S leg count determines which traits are used
-# when calculating kinship.
-# ============================================================
-
-DOCTRINE: dict[int, tuple[str, ...]] = {
-    4: (
-        "antennae",
-        "marks",
-        "tail",
-        "wings",
-    ),
-    6: (
-        "marks",
-        "legs",
-        "wings",
-        "mouth",
-        "body",
-    ),
-    8: (
-        "antennae",
-        "marks",
-        "legs",
-        "tail",
-        "wings",
-        "mouth",
-        "body",
-    ),
-}
-
-
-# ============================================================
-# Spectrum
-#
-# Higher number = stronger color = higher royal precedence.
-# ============================================================
-
-SPECTRUM: dict[Color, int] = {
-    Color.WHITE: 7,
-    Color.RED: 6,
-    Color.ORANGE: 5,
-    Color.YELLOW: 4,
-    Color.GREEN: 3,
-    Color.BLUE: 2,
-    Color.PURPLE: 1,
-}
-
-
-# ============================================================
-# Specimens
+# SPECIMENS
 # ============================================================
 
 FRASIER = Bug(
@@ -125,6 +75,7 @@ FRASIER = Bug(
     body=Body.THREEPIECE,
 )
 
+
 NILES = Bug(
     name="NILES",
     antennae=Antennae.KNOBBED,
@@ -132,9 +83,10 @@ NILES = Bug(
     legs=6,
     tail=False,
     wings=Wings.TWO,
-    mouth=Mouth.CHEWING,
+    mouth=Mouth.STRAW,
     body=Body.THREEPIECE,
 )
+
 
 MARTIN = Bug(
     name="MARTIN",
@@ -147,6 +99,7 @@ MARTIN = Bug(
     body=Body.FUSED,
 )
 
+
 DAPHNE = Bug(
     name="DAPHNE",
     antennae=Antennae.PLAIN,
@@ -158,19 +111,24 @@ DAPHNE = Bug(
     body=Body.FUSED,
 )
 
+
 ROZ = Bug(
     name="ROZ",
     antennae=Antennae.NONE,
     marks=Marks.SPOTS,
     legs=8,
     tail=False,
-    wings=Wings.NONE,
+    wings=Wings.TWO,
     mouth=Mouth.CHEWING,
     body=Body.FUSED,
 )
 
 
-BUGS: tuple[Bug, ...] = (
+# ============================================================
+# COLLECTIONS
+# ============================================================
+
+BUGS = (
     FRASIER,
     NILES,
     MARTIN,
@@ -178,7 +136,60 @@ BUGS: tuple[Bug, ...] = (
     ROZ,
 )
 
-BUG_BY_NAME: dict[str, Bug] = {
+
+BUG_BY_NAME = {
     bug.name: bug
     for bug in BUGS
+}
+
+
+# ============================================================
+# DOCTRINE
+#
+# Queen leg count determines which traits count toward kinship.
+# ============================================================
+
+DOCTRINE = {
+
+    4: (
+        "antennae",
+        "marks",
+        "tail",
+        "wings",
+    ),
+
+    6: (
+        "marks",
+        "legs",
+        "wings",
+        "mouth",
+        "body",
+    ),
+
+    8: (
+        "antennae",
+        "marks",
+        "legs",
+        "tail",
+        "wings",
+        "mouth",
+        "body",
+    ),
+}
+
+
+# ============================================================
+# SPECTRUM
+#
+# Higher number = stronger color.
+# ============================================================
+
+SPECTRUM = {
+    Color.WHITE: 7,
+    Color.RED: 6,
+    Color.ORANGE: 5,
+    Color.YELLOW: 4,
+    Color.GREEN: 3,
+    Color.BLUE: 2,
+    Color.PURPLE: 1,
 }

@@ -3,8 +3,8 @@ import time
 
 from dataclasses import dataclass, field
 
-from app.bugs import BUGS, Color
-from app.game import calculate_whack_order
+from .bugs import BUGS, Color
+from .game import calculate_whack_order
 
 
 # ============================================================
@@ -29,21 +29,11 @@ PLAYER_INDEX = {
 
 # ============================================================
 # STATIC PUZZLES
-#
-# Badge 001 = Round 1
-# Badge 002 = Round 2
-# etc.
 # ============================================================
 
 STATIC_PUZZLES = {
 
-    # --------------------------------------------------------
-    # ROUND 1 / PLAYER 001
-    #
-    # Expected:
-    # NILES -> ROZ -> MARTIN -> DAPHNE
-    # --------------------------------------------------------
-
+    # Round 1
     "001": {
         "FRASIER": Color.WHITE,
         "NILES": Color.YELLOW,
@@ -52,14 +42,7 @@ STATIC_PUZZLES = {
         "ROZ": Color.BLUE,
     },
 
-
-    # --------------------------------------------------------
-    # ROUND 2 / PLAYER 002
-    #
-    # Expected:
-    # MARTIN -> ROZ -> NILES -> FRASIER
-    # --------------------------------------------------------
-
+    # Round 2
     "002": {
         "FRASIER": Color.BLUE,
         "NILES": Color.PURPLE,
@@ -68,14 +51,7 @@ STATIC_PUZZLES = {
         "ROZ": Color.GREEN,
     },
 
-
-    # --------------------------------------------------------
-    # ROUND 3 / PLAYER 003
-    #
-    # Expected:
-    # FRASIER -> DAPHNE -> ROZ -> MARTIN
-    # --------------------------------------------------------
-
+    # Round 3
     "003": {
         "FRASIER": Color.GREEN,
         "NILES": Color.RED,
@@ -84,14 +60,7 @@ STATIC_PUZZLES = {
         "ROZ": Color.PURPLE,
     },
 
-
-    # --------------------------------------------------------
-    # ROUND 4 / PLAYER 004
-    #
-    # Expected:
-    # DAPHNE -> NILES -> ROZ -> FRASIER
-    # --------------------------------------------------------
-
+    # Round 4
     "004": {
         "FRASIER": Color.PURPLE,
         "NILES": Color.ORANGE,
@@ -100,14 +69,7 @@ STATIC_PUZZLES = {
         "ROZ": Color.GREEN,
     },
 
-
-    # --------------------------------------------------------
-    # ROUND 5 / PLAYER 005
-    #
-    # Expected:
-    # FRASIER -> DAPHNE -> NILES -> MARTIN
-    # --------------------------------------------------------
-
+    # Round 5
     "005": {
         "FRASIER": Color.YELLOW,
         "NILES": Color.BLUE,
@@ -116,14 +78,7 @@ STATIC_PUZZLES = {
         "ROZ": Color.ORANGE,
     },
 
-
-    # --------------------------------------------------------
-    # ROUND 6 / PLAYER 006
-    #
-    # Expected:
-    # DAPHNE -> FRASIER -> MARTIN -> NILES
-    # --------------------------------------------------------
-
+    # Round 6
     "006": {
         "FRASIER": Color.GREEN,
         "NILES": Color.PURPLE,
@@ -136,10 +91,6 @@ STATIC_PUZZLES = {
 
 # ============================================================
 # EXPECTED SOLUTIONS
-#
-# These are used to sanity-check the rules engine.
-# If calculate_whack_order() ever produces something different,
-# the game will tell us immediately.
 # ============================================================
 
 EXPECTED_ORDERS = {
@@ -189,8 +140,6 @@ EXPECTED_ORDERS = {
 
 # ============================================================
 # PHYSICAL MOLE MAPPING
-#
-# Arduino logical mole IDs:
 #
 # 0 = Back left
 # 1 = Back right
@@ -310,12 +259,24 @@ class MoleGame:
 
         self.state = GameState()
 
+        # RFID cards are queued here when the Arduino emits:
+        #
+        # RFID 001
+        #
+        # We do NOT act on the card until the Arduino later emits:
+        #
+        # RFID_DIAG READY_FOR_NEXT_CARD
+        #
+        # This prevents Python from blasting commands at the Mega
+        # while it is still finishing its RFID transaction.
+
+        self.pending_rfid = None
+
 
     # ========================================================
     # STARTUP TEST SEQUENCE
     #
-    # This does NOT run automatically.
-    # app.py decides whether to call it.
+    # Intentionally NOT automatic.
     # ========================================================
 
     def startup_sequence(self):
@@ -343,9 +304,6 @@ class MoleGame:
         )
 
 
-        # Temporary random colors for
-        # the hardware startup test.
-
         startup_colors = list(Color)
 
         random.shuffle(
@@ -367,8 +325,6 @@ class MoleGame:
             )
 
 
-        # Cycle each mole.
-
         for mole_id in range(5):
 
             self.arduino.send(
@@ -377,7 +333,6 @@ class MoleGame:
 
             time.sleep(1)
 
-
             self.arduino.send(
                 f"MOLE {mole_id} DOWN"
             )
@@ -385,16 +340,12 @@ class MoleGame:
             time.sleep(0.5)
 
 
-        # All up.
-
         self.arduino.send(
             "MOLES ALL UP"
         )
 
         time.sleep(2)
 
-
-        # All down.
 
         self.arduino.send(
             "MOLES ALL DOWN"
@@ -460,9 +411,7 @@ class MoleGame:
 
 
         # ----------------------------------------------------
-        # Completed player
-        #
-        # GREEN BADGES DO NOTHING.
+        # Completed badge does nothing.
         # ----------------------------------------------------
 
         if (
@@ -478,10 +427,8 @@ class MoleGame:
 
 
         # ----------------------------------------------------
-        # If another unfinished player was active,
-        # turn their yellow indicator off.
-        #
-        # We intentionally allow players to switch.
+        # If switching from another unfinished player,
+        # turn the old yellow player light off.
         # ----------------------------------------------------
 
         previous_player = (
@@ -504,7 +451,6 @@ class MoleGame:
                 ]
             )
 
-
             self.arduino.send(
                 f"PLAYER_LIGHT "
                 f"{previous_index} OFF"
@@ -512,7 +458,7 @@ class MoleGame:
 
 
         # ----------------------------------------------------
-        # Activate scanned player
+        # Activate new player
         # ----------------------------------------------------
 
         self.state.active_player = (
@@ -537,10 +483,6 @@ class MoleGame:
             f"Player {card_id} active."
         )
 
-
-        # ----------------------------------------------------
-        # Start their assigned puzzle
-        # ----------------------------------------------------
 
         self.start_new_round()
 
@@ -568,7 +510,7 @@ class MoleGame:
 
 
         # ----------------------------------------------------
-        # STATIC / SEEDED PUZZLES
+        # STATIC PUZZLES
         #
         # CURRENTLY ACTIVE
         # ----------------------------------------------------
@@ -581,14 +523,14 @@ class MoleGame:
 
 
         # ----------------------------------------------------
-        # RANDOM COLOR ASSIGNMENT
+        # RANDOM PUZZLES
         #
-        # DISABLED.
+        # DISABLED
         #
         # To return to random puzzles:
         #
-        # 1. Comment out the STATIC assignment above.
-        # 2. Uncomment this section.
+        # Comment out the STATIC assignment above,
+        # then uncomment this block.
         # ----------------------------------------------------
 
         # colors = list(Color)
@@ -629,9 +571,6 @@ class MoleGame:
         print("==============================")
 
 
-        # Prevent hits while the new puzzle
-        # is being configured.
-
         self.state.locked = True
 
         self.state.status = (
@@ -645,7 +584,7 @@ class MoleGame:
 
 
         # ----------------------------------------------------
-        # Assign puzzle colors
+        # Load colors
         # ----------------------------------------------------
 
         self.assign_colors()
@@ -677,7 +616,7 @@ class MoleGame:
 
 
         # ----------------------------------------------------
-        # Validate static puzzle
+        # Validate known solution
         # ----------------------------------------------------
 
         expected = EXPECTED_ORDERS[
@@ -739,7 +678,7 @@ class MoleGame:
 
 
         # ----------------------------------------------------
-        # Apply puzzle to cabinet
+        # Apply puzzle to hardware
         # ----------------------------------------------------
 
         self.apply_round_to_hardware()
@@ -758,22 +697,15 @@ class MoleGame:
 
     def apply_round_to_hardware(self):
 
-        # Sensors remain disabled while
-        # pneumatics/lights are configured.
-
         self.arduino.send(
             "SENSORS DISABLE"
         )
 
 
-        # Raise all five bugs.
-
         self.arduino.send(
             "MOLES ALL UP"
         )
 
-
-        # Apply assigned colors.
 
         for (
             bug_name,
@@ -787,9 +719,9 @@ class MoleGame:
             )
 
 
-            r, g, b = (
-                RGB[color]
-            )
+            r, g, b = RGB[
+                color
+            ]
 
 
             self.arduino.send(
@@ -800,9 +732,6 @@ class MoleGame:
                 f"{b}"
             )
 
-
-        # Arduino also has its mechanical
-        # settle timer before hits are accepted.
 
         self.arduino.send(
             "SENSORS ENABLE"
@@ -883,10 +812,6 @@ class MoleGame:
             )
 
 
-        # ----------------------------------------------------
-        # Determine expected bug
-        # ----------------------------------------------------
-
         if (
             self.state.hit_progress
             >= len(
@@ -910,10 +835,6 @@ class MoleGame:
         )
 
 
-        # ----------------------------------------------------
-        # Correct
-        # ----------------------------------------------------
-
         if (
             bug_name
             == expected_bug
@@ -924,10 +845,6 @@ class MoleGame:
                 bug_name,
             )
 
-
-        # ----------------------------------------------------
-        # Wrong
-        # ----------------------------------------------------
 
         else:
 
@@ -952,8 +869,6 @@ class MoleGame:
         )
 
 
-        # Lock while hardware moves.
-
         self.state.locked = True
 
 
@@ -962,21 +877,15 @@ class MoleGame:
         )
 
 
-        # Lower only the bug that was hit.
-
         self.arduino.send(
             f"MOLE {mole_id} DOWN"
         )
 
 
-        # Turn its light off.
-
         self.arduino.send(
             f"LIGHT {mole_id} OFF"
         )
 
-
-        # Advance progress.
 
         self.state.hit_progress += 1
 
@@ -989,10 +898,6 @@ class MoleGame:
         )
 
 
-        # ----------------------------------------------------
-        # Puzzle completed
-        # ----------------------------------------------------
-
         if (
             self.state.hit_progress
             >= len(
@@ -1004,10 +909,6 @@ class MoleGame:
 
             return
 
-
-        # ----------------------------------------------------
-        # Continue puzzle
-        # ----------------------------------------------------
 
         self.state.locked = False
 
@@ -1048,10 +949,6 @@ class MoleGame:
         )
 
 
-        # ----------------------------------------------------
-        # Kill playfield
-        # ----------------------------------------------------
-
         self.arduino.send(
             "SENSORS DISABLE"
         )
@@ -1067,17 +964,8 @@ class MoleGame:
         )
 
 
-        # Same player stays active/yellow.
-
         time.sleep(1)
 
-
-        # ----------------------------------------------------
-        # Restart SAME player's puzzle.
-        #
-        # Because puzzles are static, this restores
-        # the exact same puzzle and resets progress.
-        # ----------------------------------------------------
 
         self.start_new_round()
 
@@ -1096,6 +984,7 @@ class MoleGame:
         if (
             player_id is None
         ):
+
             return
 
 
@@ -1119,19 +1008,11 @@ class MoleGame:
         )
 
 
-        # ----------------------------------------------------
-        # Player indicator GREEN
-        # ----------------------------------------------------
-
         self.arduino.send(
             f"PLAYER_LIGHT "
             f"{player_index} GREEN"
         )
 
-
-        # ----------------------------------------------------
-        # Shut down playfield
-        # ----------------------------------------------------
 
         self.arduino.send(
             "SENSORS DISABLE"
@@ -1151,19 +1032,8 @@ class MoleGame:
         self.state.locked = True
 
 
-        # ----------------------------------------------------
-        # Release active player.
-        #
-        # Completed badge is now green and future
-        # scans of it are ignored.
-        # ----------------------------------------------------
-
         self.state.active_player = None
 
-
-        # ----------------------------------------------------
-        # Check full-game completion
-        # ----------------------------------------------------
 
         if (
             len(
@@ -1173,6 +1043,7 @@ class MoleGame:
         ):
 
             self.complete_full_game()
+
 
         else:
 
@@ -1188,7 +1059,7 @@ class MoleGame:
 
 
     # ========================================================
-    # ALL SIX PLAYERS COMPLETE
+    # ALL SIX COMPLETE
     # ========================================================
 
     def complete_full_game(self):
@@ -1221,9 +1092,6 @@ class MoleGame:
         )
 
 
-        # Make absolutely sure all six
-        # player indicators are green.
-
         for player_id in PLAYER_IDS:
 
             player_index = (
@@ -1238,10 +1106,6 @@ class MoleGame:
                 f"{player_index} GREEN"
             )
 
-
-        # ----------------------------------------------------
-        # Ticket payout exactly once
-        # ----------------------------------------------------
 
         if (
             not self.state.ticket_dispensed
@@ -1296,21 +1160,25 @@ class MoleGame:
         if (
             not parts
         ):
+
             return
 
 
         # ----------------------------------------------------
-        # RFID
+        # RFID CARD EVENT
         #
-        # ONLY:
+        # Arduino sends:
         #
         # RFID 001
         #
-        # through:
+        # But we do NOT handle it immediately.
         #
-        # RFID 006
+        # We queue it and wait for:
         #
-        # Diagnostic RFID_DIAG lines are ignored.
+        # RFID_DIAG READY_FOR_NEXT_CARD
+        #
+        # This prevents command traffic from colliding with
+        # the tail end of the RFID transaction.
         # ----------------------------------------------------
 
         if (
@@ -1321,9 +1189,48 @@ class MoleGame:
             parts[1] in PLAYER_IDS
         ):
 
-            self.handle_rfid(
+            self.pending_rfid = (
                 parts[1]
             )
+
+
+            print(
+                f"RFID queued: "
+                f"{self.pending_rfid}"
+            )
+
+
+            return
+
+
+        # ----------------------------------------------------
+        # RFID READER FINISHED
+        #
+        # Now it is safe to respond to the card.
+        # ----------------------------------------------------
+
+        if (
+            line
+            == "RFID_DIAG READY_FOR_NEXT_CARD"
+        ):
+
+            if (
+                self.pending_rfid
+                is not None
+            ):
+
+                card_id = (
+                    self.pending_rfid
+                )
+
+
+                self.pending_rfid = None
+
+
+                self.handle_rfid(
+                    card_id
+                )
+
 
             return
 
@@ -1331,7 +1238,7 @@ class MoleGame:
         # ----------------------------------------------------
         # HIT
         #
-        # HIT <mole> <sensor channel> <strength>
+        # HIT <mole> <sensor_channel> <strength>
         # ----------------------------------------------------
 
         if (
@@ -1354,6 +1261,7 @@ class MoleGame:
                     parts[3]
                 )
 
+
             except ValueError:
 
                 print(
@@ -1368,6 +1276,7 @@ class MoleGame:
                 sensor_channel,
                 strength,
             )
+
 
             return
 
