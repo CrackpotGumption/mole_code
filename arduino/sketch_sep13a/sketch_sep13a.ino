@@ -19,10 +19,12 @@
 #define TCA_ADDRESS 0x70
 #define MPU_ADDRESS 0x68
 
-const long HIT_THRESHOLD = 4000;
-const unsigned long HIT_COOLDOWN = 250;
+// Low threshold used ONLY to report accelerometer events to Python.
+// Python decides whether a reported event is strong enough to count as a gameplay hit.
+const long HIT_REPORT_THRESHOLD = 4000;
+const unsigned long HIT_COOLDOWN = 500;
 const unsigned long SENSOR_INTERVAL = 10;
-const unsigned long MECHANICAL_SETTLE_TIME = 500;
+const unsigned long MECHANICAL_SETTLE_TIME = 750;
 
 
 // ============================================================
@@ -394,21 +396,39 @@ bool readAccelerometer(
 
 
 // ============================================================
+// MPU6050 ACCELEROMETER RANGE
+// ============================================================
+//
+// Default MPU6050 range is +/-2g, which was clipping badly during
+// mole strikes. Use +/-16g (AFS_SEL = 3) so directional peak data
+// survives instead of constantly railing at +/-32768.
+//
+
+void configureAccelerometerRange(
+  uint8_t channel
+) {
+
+  selectTCAChannel(channel);
+
+  Wire.beginTransmission(0x68);
+  Wire.write(0x1C);       // ACCEL_CONFIG register
+  Wire.write(0x18);       // AFS_SEL = 3 => +/-16g
+  Wire.endTransmission();
+
+}
+
+
+// ============================================================
 // HIT DETECTION
 // ============================================================
 
 void checkForHits() {
 
-  if (
-    !hitDetectionEnabled
-  ) {
+  if (!hitDetectionEnabled) {
     return;
   }
 
-
-  unsigned long now =
-    millis();
-
+  unsigned long now = millis();
 
   if (
     now - lastMechanicalAction
@@ -417,7 +437,6 @@ void checkForHits() {
     return;
   }
 
-
   if (
     now - lastSensorPoll
     < SENSOR_INTERVAL
@@ -425,93 +444,194 @@ void checkForHits() {
     return;
   }
 
-
   lastSensorPoll = now;
 
+  // ----------------------------------------------------------
+  // Detect the beginning of a physical impact.
+  // ----------------------------------------------------------
 
-  for (
-    int mole = 0;
-    mole < MOLE_COUNT;
-    mole++
-  ) {
+  bool impactTriggered = false;
 
-    if (
-      now - lastHitTime[mole]
-      < HIT_COOLDOWN
-    ) {
-      continue;
-    }
-
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
 
     int16_t x;
     int16_t y;
     int16_t z;
 
-
-    if (
-      !readAccelerometer(
-        sensorChannel[mole],
-        x,
-        y,
-        z
-      )
-    ) {
+    if (!readAccelerometer(sensorChannel[mole], x, y, z)) {
       continue;
     }
 
+    long strongestAxis = max(
+      abs((long)x),
+      max(abs((long)y), abs((long)z))
+    );
 
-    long magnitude =
-      sqrt(
-        (long)x * x
-        +
-        (long)y * y
-        +
-        (long)z * z
-      );
-
-
-    long hitStrength =
-      abs(
-        magnitude - 16384L
-      );
-
-
-    if (
-      hitStrength >= HIT_THRESHOLD
-    ) {
-
-      lastHitTime[mole] =
-        now;
-
-
-      Serial.print(
-        "HIT "
-      );
-
-      Serial.print(
-        mole
-      );
-
-      Serial.print(
-        " "
-      );
-
-      Serial.print(
-        sensorChannel[mole]
-      );
-
-      Serial.print(
-        " "
-      );
-
-      Serial.println(
-        hitStrength
-      );
-
-
-      return;
+    if (strongestAxis >= HIT_REPORT_THRESHOLD) {
+      impactTriggered = true;
+      break;
     }
   }
+
+  if (!impactTriggered) {
+    return;
+  }
+
+
+  // ----------------------------------------------------------
+  // Capture all five sensors for one 75 ms physical-impact window.
+  // ----------------------------------------------------------
+
+  int16_t minX[MOLE_COUNT];
+  int16_t maxX[MOLE_COUNT];
+  int16_t minY[MOLE_COUNT];
+  int16_t maxY[MOLE_COUNT];
+  int16_t minZ[MOLE_COUNT];
+  int16_t maxZ[MOLE_COUNT];
+
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    minX[mole] = 32767;
+    maxX[mole] = -32768;
+    minY[mole] = 32767;
+    maxY[mole] = -32768;
+    minZ[mole] = 32767;
+    maxZ[mole] = -32768;
+  }
+
+  const unsigned long IMPACT_CAPTURE_MS = 75;
+  unsigned long captureStart = millis();
+
+  while (millis() - captureStart < IMPACT_CAPTURE_MS) {
+
+    for (int mole = 0; mole < MOLE_COUNT; mole++) {
+
+      int16_t x;
+      int16_t y;
+      int16_t z;
+
+      if (!readAccelerometer(sensorChannel[mole], x, y, z)) {
+        continue;
+      }
+
+      if (x < minX[mole]) minX[mole] = x;
+      if (x > maxX[mole]) maxX[mole] = x;
+      if (y < minY[mole]) minY[mole] = y;
+      if (y > maxY[mole]) maxY[mole] = y;
+      if (z < minZ[mole]) minZ[mole] = z;
+      if (z > maxZ[mole]) maxZ[mole] = z;
+    }
+  }
+
+
+  // ----------------------------------------------------------
+  // Score each mole by its largest directional range.
+  //
+  // score = max(
+  //   maxX - minX,
+  //   maxY - minY,
+  //   maxZ - minZ
+  // )
+  //
+  // The struck mole should have the largest local movement over
+  // the complete impact rather than merely the largest instantaneous
+  // cabinet vibration.
+  // ----------------------------------------------------------
+
+  long scores[MOLE_COUNT];
+
+  int winner = -1;
+  long winnerScore = -1;
+  long runnerUpScore = -1;
+
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+
+    long xRange =
+      (long)maxX[mole] - (long)minX[mole];
+
+    long yRange =
+      (long)maxY[mole] - (long)minY[mole];
+
+    long zRange =
+      (long)maxZ[mole] - (long)minZ[mole];
+
+    scores[mole] = max(
+      xRange,
+      max(yRange, zRange)
+    );
+
+    if (scores[mole] > winnerScore) {
+
+      runnerUpScore = winnerScore;
+      winnerScore = scores[mole];
+      winner = mole;
+
+    } else if (scores[mole] > runnerUpScore) {
+
+      runnerUpScore = scores[mole];
+    }
+  }
+
+
+  // Keep diagnostics visible while we tune classification.
+  Serial.print("SCORES");
+
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    Serial.print(" ");
+    Serial.print(mole);
+    Serial.print(":");
+    Serial.print(scores[mole]);
+  }
+
+  Serial.println();
+
+
+  // ----------------------------------------------------------
+  // Classification requirements.
+  //
+  // 1. Winner must show at least 10,000 counts of directional travel.
+  // 2. Winner must beat runner-up by at least 15%.
+  // ----------------------------------------------------------
+
+  const long MIN_HIT_SCORE = 10000;
+
+  bool strongEnough =
+    winnerScore >= MIN_HIT_SCORE;
+
+  bool clearWinner =
+    runnerUpScore <= 0
+    ||
+    winnerScore * 100L
+      >= runnerUpScore * 115L;
+
+
+  if (
+    winner >= 0
+    &&
+    strongEnough
+    &&
+    clearWinner
+  ) {
+
+    Serial.print("HIT ");
+    Serial.print(winner);
+    Serial.print(" ");
+    Serial.print(sensorChannel[winner]);
+    Serial.print(" ");
+    Serial.println(winnerScore);
+
+  } else {
+
+    Serial.print("IMPACT_REJECTED winner=");
+    Serial.print(winner);
+    Serial.print(" score=");
+    Serial.print(winnerScore);
+    Serial.print(" runnerup=");
+    Serial.println(runnerUpScore);
+  }
+
+
+  // Treat ringing from this capture as part of the same strike.
+  delay(HIT_COOLDOWN);
 }
 
 
@@ -1573,300 +1693,122 @@ void handleCommand(
 
   command.trim();
 
-
   if (
     command.length() == 0
   ) {
     return;
   }
 
-
-  // ----------------------------------------------------------
-  // PING
-  // ----------------------------------------------------------
-
   if (
     command == "PING"
   ) {
-
-    Serial.println(
-      "PONG"
-    );
-
+    Serial.println("PONG");
     return;
   }
 
-
-  // ----------------------------------------------------------
-  // SENSORS
-  // ----------------------------------------------------------
-
   if (
-    command ==
-      "SENSORS ENABLE"
+    command == "SENSORS ENABLE"
   ) {
-
-    hitDetectionEnabled =
-      true;
-
-
-    lastMechanicalAction =
-      millis();
-
-
-    Serial.println(
-      "OK SENSORS ENABLED"
-    );
-
+    hitDetectionEnabled = true;
+    lastMechanicalAction = millis();
+    Serial.println("OK SENSORS ENABLED");
     return;
   }
 
-
   if (
-    command ==
-      "SENSORS DISABLE"
+    command == "SENSORS DISABLE"
   ) {
-
-    hitDetectionEnabled =
-      false;
-
-
-    Serial.println(
-      "OK SENSORS DISABLED"
-    );
-
+    hitDetectionEnabled = false;
+    Serial.println("OK SENSORS DISABLED");
     return;
   }
 
-
-  // ----------------------------------------------------------
-  // ALL MOLES
-  // ----------------------------------------------------------
-
   if (
-    command ==
-      "MOLES ALL UP"
+    command == "MOLES ALL UP"
   ) {
-
-    setAllMoles(
-      true
-    );
-
-
-    Serial.println(
-      "OK MOLES ALL UP"
-    );
-
+    setAllMoles(true);
+    Serial.println("OK MOLES ALL UP");
     return;
   }
 
-
   if (
-    command ==
-      "MOLES ALL DOWN"
+    command == "MOLES ALL DOWN"
   ) {
-
-    setAllMoles(
-      false
-    );
-
-
-    Serial.println(
-      "OK MOLES ALL DOWN"
-    );
-
+    setAllMoles(false);
+    Serial.println("OK MOLES ALL DOWN");
     return;
   }
 
-
-  // ----------------------------------------------------------
-  // ALL MOLE LIGHTS
-  // ----------------------------------------------------------
-
   if (
-    command ==
-      "LIGHTS OFF"
+    command == "LIGHTS OFF"
   ) {
-
     turnAllMoleLightsOff();
-
-
-    Serial.println(
-      "OK LIGHTS OFF"
-    );
-
+    Serial.println("OK LIGHTS OFF");
     return;
   }
-
-
-  // ----------------------------------------------------------
-  // PLAYER LIGHTS
-  // ----------------------------------------------------------
 
   if (
-    command ==
-      "PLAYER_LIGHTS OFF"
+    command == "PLAYER_LIGHTS OFF"
   ) {
-
     clearPlayerLights();
-
-
-    Serial.println(
-      "OK PLAYER_LIGHTS OFF"
-    );
-
+    Serial.println("OK PLAYER_LIGHTS OFF");
     return;
   }
 
-
   // ----------------------------------------------------------
-  // INDIVIDUAL MOLE UP
+  // INDIVIDUAL MOLE
   // ----------------------------------------------------------
 
   int mole;
-
-
-  if (
-    sscanf(
-      command.c_str(),
-      "MOLE %d UP",
-      &mole
-    )
-    == 1
-  ) {
-
-    if (
-      mole >= 0
-      &&
-      mole < MOLE_COUNT
-    ) {
-
-      setMole(
-        mole,
-        true
-      );
-
-
-      Serial.print(
-        "OK MOLE "
-      );
-
-      Serial.print(
-        mole
-      );
-
-      Serial.println(
-        " UP"
-      );
-
-    } else {
-
-      Serial.println(
-        "ERROR BAD MOLE"
-      );
-    }
-
-
-    return;
-  }
-
-
-  // ----------------------------------------------------------
-  // INDIVIDUAL MOLE DOWN
-  // ----------------------------------------------------------
+  char moleAction[16];
 
   if (
     sscanf(
       command.c_str(),
-      "MOLE %d DOWN",
-      &mole
-    )
-    == 1
+      "MOLE %d %15s",
+      &mole,
+      moleAction
+    ) == 2
   ) {
 
     if (
-      mole >= 0
-      &&
-      mole < MOLE_COUNT
+      mole < 0
+      ||
+      mole >= MOLE_COUNT
     ) {
-
-      setMole(
-        mole,
-        false
-      );
-
-
-      Serial.print(
-        "OK MOLE "
-      );
-
-      Serial.print(
-        mole
-      );
-
-      Serial.println(
-        " DOWN"
-      );
-
-    } else {
-
-      Serial.println(
-        "ERROR BAD MOLE"
-      );
+      Serial.println("ERROR BAD MOLE");
+      return;
     }
-
-
-    return;
-  }
-
-
-  // ----------------------------------------------------------
-  // INDIVIDUAL LIGHT OFF
-  // ----------------------------------------------------------
-
-  if (
-    sscanf(
-      command.c_str(),
-      "LIGHT %d OFF",
-      &mole
-    )
-    == 1
-  ) {
 
     if (
-      mole >= 0
-      &&
-      mole < MOLE_COUNT
+      strcmp(
+        moleAction,
+        "UP"
+      ) == 0
     ) {
-
-      turnMoleLightOff(
-        mole
-      );
-
-
-      Serial.print(
-        "OK LIGHT "
-      );
-
-      Serial.print(
-        mole
-      );
-
-      Serial.println(
-        " OFF"
-      );
-
-    } else {
-
-      Serial.println(
-        "ERROR BAD LIGHT"
-      );
+      setMole(mole, true);
+      Serial.print("OK MOLE ");
+      Serial.print(mole);
+      Serial.println(" UP");
+      return;
     }
 
+    if (
+      strcmp(
+        moleAction,
+        "DOWN"
+      ) == 0
+    ) {
+      setMole(mole, false);
+      Serial.print("OK MOLE ");
+      Serial.print(mole);
+      Serial.println(" DOWN");
+      return;
+    }
 
+    Serial.println("ERROR BAD MOLE ACTION");
     return;
   }
-
 
   // ----------------------------------------------------------
   // RGB MOLE LIGHT
@@ -1876,7 +1818,6 @@ void handleCommand(
   int g;
   int b;
 
-
   if (
     sscanf(
       command.c_str(),
@@ -1885,8 +1826,7 @@ void handleCommand(
       &r,
       &g,
       &b
-    )
-    == 4
+    ) == 4
   ) {
 
     if (
@@ -1894,7 +1834,6 @@ void handleCommand(
       &&
       mole < MOLE_COUNT
     ) {
-
       setMoleLight(
         mole,
         r,
@@ -1902,189 +1841,129 @@ void handleCommand(
         b
       );
 
-
-      Serial.print(
-        "OK LIGHT "
-      );
-
-      Serial.print(
-        mole
-      );
-
-      Serial.print(
-        " "
-      );
-
-      Serial.print(
-        r
-      );
-
-      Serial.print(
-        " "
-      );
-
-      Serial.print(
-        g
-      );
-
-      Serial.print(
-        " "
-      );
-
-      Serial.println(
-        b
-      );
-
+      Serial.print("OK LIGHT ");
+      Serial.print(mole);
+      Serial.print(" ");
+      Serial.print(r);
+      Serial.print(" ");
+      Serial.print(g);
+      Serial.print(" ");
+      Serial.println(b);
     } else {
-
-      Serial.println(
-        "ERROR BAD LIGHT"
-      );
+      Serial.println("ERROR BAD LIGHT");
     }
-
 
     return;
   }
 
+  // ----------------------------------------------------------
+  // INDIVIDUAL LIGHT OFF
+  // ----------------------------------------------------------
+
+  char lightAction[16];
+
+  if (
+    sscanf(
+      command.c_str(),
+      "LIGHT %d %15s",
+      &mole,
+      lightAction
+    ) == 2
+  ) {
+
+    if (
+      mole < 0
+      ||
+      mole >= MOLE_COUNT
+    ) {
+      Serial.println("ERROR BAD LIGHT");
+      return;
+    }
+
+    if (
+      strcmp(
+        lightAction,
+        "OFF"
+      ) == 0
+    ) {
+      turnMoleLightOff(mole);
+      Serial.print("OK LIGHT ");
+      Serial.print(mole);
+      Serial.println(" OFF");
+      return;
+    }
+
+    Serial.println("ERROR BAD LIGHT ACTION");
+    return;
+  }
 
   // ----------------------------------------------------------
-  // PLAYER LIGHTS
+  // PLAYER LIGHT
   // ----------------------------------------------------------
 
   int player;
-
-
-  if (
-    sscanf(
-      command.c_str(),
-      "PLAYER_LIGHT %d OFF",
-      &player
-    )
-    == 1
-  ) {
-
-    if (
-      player >= 0
-      &&
-      player < PLAYER_COUNT
-    ) {
-
-      setPlayerOff(
-        player
-      );
-
-
-      Serial.print(
-        "OK PLAYER_LIGHT "
-      );
-
-      Serial.print(
-        player
-      );
-
-      Serial.println(
-        " OFF"
-      );
-
-    } else {
-
-      Serial.println(
-        "ERROR BAD PLAYER"
-      );
-    }
-
-
-    return;
-  }
-
+  char playerAction[16];
 
   if (
     sscanf(
       command.c_str(),
-      "PLAYER_LIGHT %d YELLOW",
-      &player
-    )
-    == 1
+      "PLAYER_LIGHT %d %15s",
+      &player,
+      playerAction
+    ) == 2
   ) {
 
     if (
-      player >= 0
-      &&
-      player < PLAYER_COUNT
+      player < 0
+      ||
+      player >= PLAYER_COUNT
     ) {
-
-      setPlayerYellow(
-        player
-      );
-
-
-      Serial.print(
-        "OK PLAYER_LIGHT "
-      );
-
-      Serial.print(
-        player
-      );
-
-      Serial.println(
-        " YELLOW"
-      );
-
-    } else {
-
-      Serial.println(
-        "ERROR BAD PLAYER"
-      );
+      Serial.println("ERROR BAD PLAYER");
+      return;
     }
-
-
-    return;
-  }
-
-
-  if (
-    sscanf(
-      command.c_str(),
-      "PLAYER_LIGHT %d GREEN",
-      &player
-    )
-    == 1
-  ) {
 
     if (
-      player >= 0
-      &&
-      player < PLAYER_COUNT
+      strcmp(
+        playerAction,
+        "OFF"
+      ) == 0
     ) {
-
-      setPlayerGreen(
-        player
-      );
-
-
-      Serial.print(
-        "OK PLAYER_LIGHT "
-      );
-
-      Serial.print(
-        player
-      );
-
-      Serial.println(
-        " GREEN"
-      );
-
-    } else {
-
-      Serial.println(
-        "ERROR BAD PLAYER"
-      );
+      setPlayerOff(player);
+      Serial.print("OK PLAYER_LIGHT ");
+      Serial.print(player);
+      Serial.println(" OFF");
+      return;
     }
 
+    if (
+      strcmp(
+        playerAction,
+        "YELLOW"
+      ) == 0
+    ) {
+      setPlayerYellow(player);
+      Serial.print("OK PLAYER_LIGHT ");
+      Serial.print(player);
+      Serial.println(" YELLOW");
+      return;
+    }
 
+    if (
+      strcmp(
+        playerAction,
+        "GREEN"
+      ) == 0
+    ) {
+      setPlayerGreen(player);
+      Serial.print("OK PLAYER_LIGHT ");
+      Serial.print(player);
+      Serial.println(" GREEN");
+      return;
+    }
+
+    Serial.println("ERROR BAD PLAYER LIGHT ACTION");
     return;
   }
-
 
   // ----------------------------------------------------------
   // TICKET
@@ -2092,14 +1971,12 @@ void handleCommand(
 
   int ticketCount;
 
-
   if (
     sscanf(
       command.c_str(),
       "TICKET %d",
       &ticketCount
-    )
-    == 1
+    ) == 1
   ) {
 
     if (
@@ -2107,61 +1984,38 @@ void handleCommand(
       ||
       ticketCount > 100
     ) {
-
-      Serial.println(
-        "ERROR BAD TICKET COUNT"
-      );
-
+      Serial.println("ERROR BAD TICKET COUNT");
       return;
     }
 
-
-    dispenseTickets(
-      ticketCount
-    );
-
-
+    dispenseTickets(ticketCount);
     return;
   }
-
 
   // ----------------------------------------------------------
   // STATUS
   // ----------------------------------------------------------
 
   if (
-    command ==
-      "STATUS"
+    command == "STATUS"
   ) {
-
     printStatus();
-
     return;
   }
-
 
   if (
-    command ==
-      "RFID STATUS"
+    command == "RFID STATUS"
   ) {
-
     printRFIDStatus();
-
     return;
   }
-
 
   // ----------------------------------------------------------
   // UNKNOWN
   // ----------------------------------------------------------
 
-  Serial.print(
-    "ERROR UNKNOWN COMMAND "
-  );
-
-  Serial.println(
-    command
-  );
+  Serial.print("ERROR UNKNOWN COMMAND ");
+  Serial.println(command);
 }
 
 
@@ -2387,6 +2241,26 @@ void setup() {
   lastMechanicalAction =
     millis();
 
+
+  // Increase all MPU6050 accelerometers to +/-16g before gameplay.
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    configureAccelerometerRange(
+      sensorChannel[mole]
+    );
+  }
+
+  Serial.println("ACCEL_RANGE +/-16G");
+
+  Serial.println(
+    "MAPPING logical_mole -> mux_channel"
+  );
+
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    Serial.print("MAPPING mole=");
+    Serial.print(mole);
+    Serial.print(" mux=");
+    Serial.println(sensorChannel[mole]);
+  }
 
   Serial.println(
     "READY"

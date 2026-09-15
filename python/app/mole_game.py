@@ -1112,13 +1112,107 @@ class MoleGame:
         ):
 
             self.arduino.send(
-                "TICKET 1"
+                "TICKET 8"
             )
 
 
             self.state.ticket_dispensed = (
                 True
             )
+
+
+        # Leave the completed-game display up long enough for the
+        # ticket payout / celebration to be seen, then automatically
+        # return the cabinet to its initial waiting state.
+        #
+        # This runs on the event-worker thread, not the serial-reader
+        # thread, so ACKs can continue to be received normally.
+        self.arduino.wait_until_idle()
+
+        print(
+            "Game complete. Resetting in 25 seconds..."
+        )
+
+        time.sleep(25)
+
+
+        # ----------------------------------------------------
+        # END-OF-GAME RESET WARNING
+        #
+        # Blink all five mole lights and all six player lights
+        # three times before clearing the game.
+        # ----------------------------------------------------
+
+        for _ in range(3):
+
+            for mole_id in range(5):
+
+                self.arduino.send(
+                    f"LIGHT {mole_id} 255 255 255"
+                )
+
+            for player_id in PLAYER_IDS:
+
+                player_index = (
+                    PLAYER_INDEX[
+                        player_id
+                    ]
+                )
+
+                self.arduino.send(
+                    f"PLAYER_LIGHT "
+                    f"{player_index} GREEN"
+                )
+
+            self.arduino.wait_until_idle()
+
+            time.sleep(0.4)
+
+            self.arduino.send(
+                "LIGHTS OFF"
+            )
+
+            self.arduino.send(
+                "PLAYER_LIGHTS OFF"
+            )
+
+            self.arduino.wait_until_idle()
+
+            time.sleep(0.4)
+
+
+        # ----------------------------------------------------
+        # STATE 0
+        # ----------------------------------------------------
+
+        self.arduino.send(
+            "SENSORS DISABLE"
+        )
+
+        self.arduino.send(
+            "MOLES ALL DOWN"
+        )
+
+        self.arduino.send(
+            "LIGHTS OFF"
+        )
+
+        self.arduino.send(
+            "PLAYER_LIGHTS OFF"
+        )
+
+        self.arduino.wait_until_idle()
+
+
+        self.state = GameState()
+
+        self.pending_rfid = None
+
+
+        print()
+        print("==============================")
+        print("GAME RESET - STATE 0")
+        print("==============================")
 
 
     # ========================================================

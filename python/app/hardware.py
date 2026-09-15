@@ -25,6 +25,11 @@ class ArduinoController:
         # All outgoing commands go through one queue.
         self.command_queue = queue.Queue()
 
+        # Arduino gameplay events are handled on a separate worker.
+        # The serial reader must NEVER run game logic directly because
+        # game logic may wait for command ACKs that only the reader can receive.
+        self.event_queue = queue.Queue()
+
         # Set by reader thread when Arduino replies
         # OK ... or ERROR ...
         self.command_ack = threading.Event()
@@ -46,6 +51,22 @@ class ArduinoController:
         )
 
         self.reader.start()
+
+
+        # ----------------------------------------------------
+        # Event worker thread
+        #
+        # Serial reader only receives/parses serial data.
+        # Gameplay callbacks run here so ACK reception can continue
+        # even while game logic waits for the command queue to drain.
+        # ----------------------------------------------------
+
+        self.event_worker = threading.Thread(
+            target=self._event_loop,
+            daemon=True,
+        )
+
+        self.event_worker.start()
 
 
         # ----------------------------------------------------
@@ -265,17 +286,50 @@ class ArduinoController:
 
             if self.event_handler:
 
-                try:
+                self.event_queue.put(
+                    text
+                )
+
+
+    # ========================================================
+    # EVENT LOOP
+    #
+    # Runs gameplay callbacks away from the serial reader.
+    # This prevents deadlocks when gameplay waits for queued
+    # Arduino commands to receive their ACKs.
+    # ========================================================
+
+    def _event_loop(self):
+
+        while self.running:
+
+            try:
+
+                text = self.event_queue.get(
+                    timeout=0.1
+                )
+
+            except queue.Empty:
+                continue
+
+
+            try:
+
+                if self.event_handler:
 
                     self.event_handler(
                         text
                     )
 
-                except Exception as e:
+            except Exception as e:
 
-                    print(
-                        f"EVENT HANDLER ERROR: {e}"
-                    )
+                print(
+                    f"EVENT HANDLER ERROR: {e}"
+                )
+
+            finally:
+
+                self.event_queue.task_done()
 
 
     # ========================================================
