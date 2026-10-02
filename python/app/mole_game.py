@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 
 from .bugs import BUGS, Color
 from .game import calculate_whack_order
+from .progress_store import ProgressStore
+from .audio_cues import SilentAudio
 
 
 # ============================================================
@@ -310,9 +312,18 @@ class MoleGame:
     def __init__(
         self,
         arduino,
+        state_path=None,
+        audio=None,
+        failure_seconds=15.0,
+        stop_requested=None,
     ):
 
         self.arduino = arduino
+        self.audio = audio or SilentAudio()
+        self.stop_requested = stop_requested or (lambda: False)
+        self.failure_seconds = float(failure_seconds)
+        if not 0 <= self.failure_seconds <= 120:
+            raise ValueError("FAILURE_SECONDS must be between 0 and 120")
 
         self._event_lock = threading.RLock()
         self._stopping = False
@@ -320,6 +331,36 @@ class MoleGame:
         self._accept_samples_after = float("inf")
         self._hit_latched = set()
         self._last_hit = {}
+        self.persistence_error = None
+        self._progress_store = ProgressStore(state_path, PLAYER_IDS) if state_path else None
+        if self._progress_store is not None:
+            completed, ticket_requested = self._progress_store.load()
+            self.state.completed_players = completed
+            self.state.ticket_dispensed = ticket_requested
+
+    def _save_progress(self):
+        if self._progress_store is None:
+            return
+        try:
+            self._progress_store.save(self.state.completed_players, self.state.ticket_dispensed)
+        except Exception as error:
+            self.persistence_error = str(error)
+            self.state.locked = True
+            raise
+
+    def restore_hardware(self):
+        """Restore indicators without resuming an interrupted physical round."""
+        with self._event_lock:
+            self.arduino.send("SENSORS DISABLE")
+            self.arduino.send("MOLES ALL DOWN")
+            self.arduino.send("LIGHTS OFF")
+            self.arduino.send("PLAYER_LIGHTS OFF")
+            for player in sorted(self.state.completed_players):
+                self.arduino.send(f"PLAYER_LIGHT {PLAYER_INDEX[player]} GREEN")
+            self.arduino.wait_until_idle()
+            if self.state.completed_players == set(PLAYER_IDS):
+                self.complete_full_game()
+
 
 
     # ========================================================
@@ -446,7 +487,7 @@ class MoleGame:
 
     def handle_rfid(self, card_id):
         with self._event_lock:
-            if not self._stopping:
+            if not self._stopping and self.persistence_error is None:
                 self._handle_rfid(card_id)
 
     def _handle_rfid(
@@ -767,6 +808,7 @@ class MoleGame:
         self.state.status = (
             "PLAYING"
         )
+        self.audio.play("game_start")
 
 
     # ========================================================
@@ -912,6 +954,8 @@ class MoleGame:
 
             return
 
+
+        self.audio.play("mole_hit")
 
         expected_bug = (
             self.state.whack_order[
@@ -1079,8 +1123,9 @@ class MoleGame:
 
 
         # Same player stays active/yellow.
-
-        time.sleep(1)
+        self.run_failure_show()
+        if self.stop_requested():
+            return
 
 
         # ----------------------------------------------------
@@ -1092,6 +1137,37 @@ class MoleGame:
 
         self.start_new_round()
 
+
+    def run_failure_show(self):
+        self.state.status = "LAUGH AT YOU"
+        self._accept_samples_after = float("inf")
+        self.arduino.wait_until_idle()
+        self.audio.play_failure(self.failure_seconds)
+        deadline = time.monotonic() + self.failure_seconds
+        raised = set()
+        # Bound iterations as well as elapsed time, including in simulations.
+        try:
+            for _ in range(int(self.failure_seconds / 0.5 + 0.999)):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or self.stop_requested():
+                    break
+                step_start = time.monotonic()
+                selected = set(random.sample(range(5), random.randint(1, 3)))
+                for mole in sorted(raised - selected):
+                    self.arduino.send(f"MOLE {mole} DOWN")
+                for mole in sorted(selected - raised):
+                    self.arduino.send(f"MOLE {mole} UP")
+                raised = selected
+                for mole in range(5):
+                    r, g, b = random.choice(tuple(RGB.values()))
+                    self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
+                self.arduino.wait_until_idle()
+                time.sleep(max(0, min(deadline - time.monotonic(),
+                                      0.5 - (time.monotonic() - step_start))))
+        finally:
+            self.arduino.send("MOLES ALL DOWN")
+            self.arduino.send("LIGHTS OFF")
+            self.arduino.wait_until_idle()
 
     # ========================================================
     # PLAYER COMPLETE
@@ -1121,6 +1197,7 @@ class MoleGame:
         self.state.completed_players.add(
             player_id
         )
+        self._save_progress()
 
 
         player_index = (
@@ -1258,14 +1335,11 @@ class MoleGame:
             not self.state.ticket_dispensed
         ):
 
-            self.arduino.send(
-                "TICKET 8"
-            )
-
-
-            self.state.ticket_dispensed = (
-                True
-            )
+            # Persist the intent BEFORE queuing the physical payout. This prevents
+            # duplicate requests after reboot, but cannot confirm physical delivery.
+            self.state.ticket_dispensed = True
+            self._save_progress()
+            self.arduino.send("TICKET 8")
 
 
     # ========================================================
@@ -1336,7 +1410,7 @@ class MoleGame:
 
     def handle_arduino_event(self, line, received_at=None):
         with self._event_lock:
-            if not self._stopping:
+            if not self._stopping and self.persistence_error is None:
                 self._handle_arduino_event(line, received_at)
 
     def _handle_arduino_event(

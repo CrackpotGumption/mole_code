@@ -76,6 +76,9 @@ SERIAL_DEVICE=''
 # Publish the status API on the cabinet LAN address.
 STATUS_BIND='0.0.0.0'
 STATUS_PORT=8080
+FAILURE_SECONDS=15
+AUDIO_DEVICE='default'
+AUDIO_ENABLED=1
 CONFIG
     chmod 0600 /etc/mole-cabinet/cabinet.conf
 fi

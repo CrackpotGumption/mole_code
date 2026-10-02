@@ -34,7 +34,8 @@ Docker starts `python -m app.app` as the main process. The application opens
 then serves JSON `/state` and `/health` on `STATUS_PORT` (default 8080).
 The cabinet launcher maps the host Arduino to `/dev/cabinet-arduino` inside
 the container and publishes port 8080 to the LAN. No internet is needed for
-gameplay or status access. State is in memory and resets on container restart.
+gameplay or status access. Completed players are checkpointed to `/data/progress.json` in the
+`mole-game-data` Docker volume. An unfinished puzzle restarts after a badge scan.
 
 SIGTERM (`docker stop`) and Ctrl+C lock gameplay, disable sensors, retract all
 moles, turn off lights, attempt a bounded command drain, then close the serial
@@ -48,3 +49,26 @@ freshness or mechanical operation. Docker's unhealthy label alone does not
 restart a container; the application exits on detected serial disconnection.
 Keyboard badge simulation requires attached stdin (`docker run -i`); a detached
 cabinet normally uses physical RFID badges.
+
+## Recovery after power loss
+
+The cabinet launcher mounts the named volume `mole-game-data` at `/data`.
+Completed badges are saved before their green indicators are set, using an
+atomic file replacement and disk synchronization. On startup the controller
+retracts the playfield, restores completed players' green indicators, and waits
+for an unfinished player's badge. A partial puzzle is restarted rather than
+resuming physical target positions.
+
+The volume survives ordinary container deletion, updates, and rollback. Don't
+delete it or use volume-pruning commands on the cabinet. Direct Python execution
+can opt in with `GAME_STATE_PATH=/path/to/progress.json`; without that environment
+variable it remains in-memory for development.
+
+Invalid saved progress stops startup and preserves the file for recovery.
+A failed save locks gameplay and exits the process rather than continuing with
+unrecorded completions. Ticket request intent is persisted before issuing the
+command so reboot does not request another payout. A power cut between recording
+intent and actual dispensing can leave tickets unpaid; physical payout
+confirmation still needs separate handling. A completed six-player game stays
+completed across restarts; starting a new group requires clearing its checkpoint
+while the controller is stopped. An automatic/session reset is not implemented.

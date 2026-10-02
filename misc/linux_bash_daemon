@@ -68,9 +68,19 @@ launch_game() {
         docker stop --time 15 "$CONTAINER_NAME" >/dev/null
         docker rename "$CONTAINER_NAME" "$backup"
     fi
+    local audio_args=(--env AUDIO_ENABLED=0)
+    if [[ -d /dev/snd ]]; then
+        audio_args=(--device /dev/snd:/dev/snd --env "AUDIO_ENABLED=${AUDIO_ENABLED:-1}")
+    fi
     if docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
         --device "$SERIAL_DEVICE:/dev/cabinet-arduino" \
         --env ARDUINO_PORT=/dev/cabinet-arduino --env STATUS_PORT=8080 \
+        --env GAME_STATE_PATH=/data/progress.json \
+        --env "FAILURE_SECONDS=${FAILURE_SECONDS:-15}" \
+        --env "AUDIO_DEVICE=${AUDIO_DEVICE:-default}" \
+        --env "AUDIO_ENABLED=${AUDIO_ENABLED:-1}" \
+        "${audio_args[@]}" \
+        --mount type=volume,source=mole-game-data,target=/data \
         --publish "$STATUS_BIND:$STATUS_PORT:8080" \
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
         --label mole-cabinet.managed=true "$image_id" && wait_healthy; then

@@ -22,6 +22,7 @@ def keyboard_rfid_loop(arduino, stopped):
 
 
 def main():
+    from app.audio_cues import AudioCues
     from app.hardware import ArduinoController
     from app.mole_game import MoleGame
     from app.status_service import StatusService
@@ -30,7 +31,7 @@ def main():
     status_port = int(os.environ.get("STATUS_PORT", "8080"))
     stopped = threading.Event()
     previous_handlers = {}
-    arduino = game = status_service = None
+    arduino = game = status_service = audio = None
 
     def request_shutdown(signum, frame):
         # Serial operations run in finally, never inside the signal handler.
@@ -42,13 +43,19 @@ def main():
     try:
         print(f"MOLE GAME CONTROLLER | Arduino: {port} at 115200 | Status: {status_port}")
         arduino = ArduinoController(port=port, baud=115200)
-        game = MoleGame(arduino)
+        audio = AudioCues()
+        game = MoleGame(arduino, state_path=os.environ.get("GAME_STATE_PATH") or None,
+                        audio=audio, failure_seconds=os.environ.get("FAILURE_SECONDS", "15"),
+                        stop_requested=stopped.is_set)
+        game.restore_hardware()
         arduino.event_handler = game.handle_arduino_event
         status_service = StatusService(game, port=status_port)
         status_service.start()
         threading.Thread(target=keyboard_rfid_loop, args=(arduino, stopped), daemon=True).start()
 
         while not stopped.wait(0.1):
+            if game.persistence_error is not None:
+                raise RuntimeError(f"Progress could not be saved: {game.persistence_error}")
             if not arduino.running:
                 print("Arduino connection lost; exiting so the container can restart.")
                 return 1
@@ -70,6 +77,8 @@ def main():
             if status_service is not None:
                 status_service.stop()
             arduino.close()
+        if audio is not None:
+            audio.close()
         for signum, handler in previous_handlers.items():
             signal.signal(signum, handler)
 

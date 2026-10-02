@@ -55,7 +55,8 @@ class LauncherTests(unittest.TestCase):
             config.write_text("IMAGE='example/mole-game:latest'\nCONTAINER_NAME=mole-game\n"
                               "SERIAL_DEVICE=/dev/null\nSTATUS_BIND=0.0.0.0\nSTATUS_PORT=8080\n")
             for name, content in [('docker', DOCKER), ('sleep', '#!/bin/sh\nexit 0\n'),
-                                  ('flock', '#!/bin/sh\nexit 0\n')]:
+                                  ('flock', '#!/bin/sh\nexit 0\n'),
+                                  ('timeout', '#!/bin/sh\nshift\nexec "$@"\n')]:
                 file = root / name
                 file.write_text(content)
                 file.chmod(0o755)
@@ -74,6 +75,8 @@ class LauncherTests(unittest.TestCase):
         self.assertIn('0.0.0.0:8080:8080', run)
         self.assertIn('/dev/null:/dev/cabinet-arduino', run)
         self.assertIn('max-size=10m', run)
+        self.assertIn('type=volume,source=mole-game-data,target=/data', run)
+        self.assertIn('GAME_STATE_PATH=/data/progress.json', run)
 
     def test_offline_uses_cached_image(self):
         result, state = self.run_launcher(offline=True)

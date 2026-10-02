@@ -1,5 +1,9 @@
 # Linux cabinet installation
 
+Detailed instructions:
+- [Fresh Linux installation](FRESH_LINUX_SETUP.md)
+- [Migration from the previous instructions](UPGRADE_EXISTING_LINUX.md)
+
 These scripts support Ubuntu and Ubuntu-based Linux Mint. Initial provisioning
 requires internet access. Booting an already installed cabinet does not.
 
@@ -37,7 +41,8 @@ with `sudo docker load -i game-image.tar`. An image placeholder causes a clear
 failure without stopping existing containers.
 
 Updates use the resolved local image ID, pass through only the selected serial
-device, set `ARDUINO_PORT`, publish the status port, and rotate container logs
+device, set `ARDUINO_PORT`, mount `mole-game-data` for durable completed-player
+progress, publish the status port, and rotate container logs
 at 10 MB with three files. The previous container is retained until the new
 container's `/state` endpoint responds. Failed creation/startup restores the
 previous container, and systemd retries after 60 seconds. This check verifies

@@ -59,7 +59,7 @@ class RuntimeTests(unittest.TestCase):
             'app.hardware': types.SimpleNamespace(ArduinoController=lambda **kwargs: hardware),
             'app.status_service': types.SimpleNamespace(StatusService=make_status),
         }
-        with patch.dict(sys.modules, modules), patch('app.app.threading.Thread'), \
+        with patch.dict(sys.modules, modules), patch.dict('os.environ', {'GAME_STATE_PATH': ''}), patch('app.app.threading.Thread'), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             result = app.main()
         return result, hardware, services
@@ -69,7 +69,7 @@ class RuntimeTests(unittest.TestCase):
         result, hardware, services = self.run_main('signal')
         self.assertEqual(result, 0)
         self.assertEqual(hardware.commands,
-                         ['SENSORS DISABLE', 'MOLES ALL DOWN', 'LIGHTS OFF', 'PLAYER_LIGHTS OFF'])
+                         ['SENSORS DISABLE', 'MOLES ALL DOWN', 'LIGHTS OFF', 'PLAYER_LIGHTS OFF'] * 2)
         self.assertTrue(hardware.drained)
         self.assertTrue(hardware.closed)
         self.assertTrue(services[0].stopped)

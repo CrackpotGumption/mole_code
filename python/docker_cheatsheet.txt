@@ -8,6 +8,7 @@ docker run -d \
   --device=/dev/serial/by-id/REPLACE_WITH_ARDUINO:/dev/cabinet-arduino \
   -e ARDUINO_PORT=/dev/cabinet-arduino \
   -e STATUS_PORT=8080 \
+  --mount type=volume,source=mole-game-data,target=/data \
   -p 8080:8080 \
   --log-driver=json-file \
   --log-opt max-size=10m \
@@ -18,7 +19,7 @@ docker logs --tail 100 -f mole-game
 docker inspect --format '{{.State.Health.Status}}' mole-game
 docker stop --time 15 mole-game
 
-# Future Docker Hub release (run after signing in with docker login).
+# Republish to Docker Hub after signing in with docker login.
 # docker tag mole-game:latest myst1cus/mole-game:latest
 # docker push myst1cus/mole-game:latest
 # Set IMAGE to that full name in /etc/mole-cabinet/cabinet.conf.
