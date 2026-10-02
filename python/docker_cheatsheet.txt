@@ -1,10 +1,24 @@
+# Run from the repository root. Local image and container are named mole-game.
+docker build -t mole-game:latest ./python
+
+# Replace the device path with the cabinet Arduino's stable host path.
 docker run -d \
-  --name whac-game \
+  --name mole-game \
   --restart unless-stopped \
-  --device=/dev/ttyACM0:/dev/ttyACM0 \
-  -e ARDUINO_PORT=/dev/ttyACM0 \
+  --device=/dev/serial/by-id/REPLACE_WITH_ARDUINO:/dev/cabinet-arduino \
+  -e ARDUINO_PORT=/dev/cabinet-arduino \
+  -e STATUS_PORT=8080 \
   -p 8080:8080 \
-  whac-game
+  --log-driver=json-file \
+  --log-opt max-size=10m \
+  --log-opt max-file=3 \
+  mole-game:latest
 
+docker logs --tail 100 -f mole-game
+docker inspect --format '{{.State.Health.Status}}' mole-game
+docker stop --time 15 mole-game
 
-  docker build -t whac-game .
+# Future Docker Hub release (run after signing in with docker login).
+# docker tag mole-game:latest myst1cus/mole-game:latest
+# docker push myst1cus/mole-game:latest
+# Set IMAGE to that full name in /etc/mole-cabinet/cabinet.conf.

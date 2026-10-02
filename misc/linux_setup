@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# One-time Linux Mint/Ubuntu cabinet provisioning: sudo bash misc/linux_setup
+set -Eeuo pipefail
+trap 'echo "Provisioning failed at line $LINENO" >&2' ERR
+[[ $EUID -eq 0 ]] || { echo 'Run with sudo.' >&2; exit 1; }
+source /etc/os-release
+case ${ID:-} in
+    ubuntu) base=${VERSION_CODENAME:?Missing Ubuntu codename} ;;
+    linuxmint) base=${UBUNTU_CODENAME:?This script requires Ubuntu-based Mint} ;;
+    *) echo 'Supported systems: Ubuntu and Ubuntu-based Linux Mint.' >&2; exit 1 ;;
+esac
+cabinet_user=${SUDO_USER:-}
+if [[ -n $cabinet_user && $cabinet_user != root ]]; then
+    id "$cabinet_user" >/dev/null
+fi
+export DEBIAN_FRONTEND=noninteractive
+dpkg --configure -a
+apt-get update
+apt-get -f install -y
+apt-get -o Dpkg::Options::=--force-confold upgrade -y
+apt-get install -y ca-certificates curl python3 usbutils unattended-upgrades util-linux coreutils
+install -m 0755 -d /etc/apt/keyrings
+key_file=$(mktemp)
+trap 'rm -f "$key_file"' EXIT
+curl --fail --show-error --silent --location --retry 3 --connect-timeout 15 \
+    --max-time 120 https://download.docker.com/linux/ubuntu/gpg -o "$key_file"
+install -m 0644 "$key_file" /etc/apt/keyrings/docker.asc
+# Refuse conflicting installations rather than silently removing their workloads.
+conflicts=()
+for package in docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc; do
+    if [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true) == 'install ok installed' ]]; then
+        conflicts+=("$package")
+    fi
+done
+if ((${#conflicts[@]})); then
+    printf 'Remove conflicting packages before retrying: %s\n' "${conflicts[*]}" >&2
+    exit 1
+fi
+cat > /etc/apt/sources.list.d/docker.sources <<SOURCES
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $base
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+SOURCES
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker.service containerd.service
+systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+install -d /etc/systemd/logind.conf.d
+cat > /etc/systemd/logind.conf.d/60-mole-cabinet.conf <<'LOGIND'
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+IdleAction=ignore
+LOGIND
+# Apply logind settings on the recommended reboot; don't disrupt this login.
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<'UPDATES'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+UPDATES
+if [[ -n $cabinet_user && $cabinet_user != root ]]; then
+    usermod -aG dialout "$cabinet_user"
+fi
+# Docker commands are run by root services; interactive docker-group access is unnecessary.
+install -d -m 0755 /etc/mole-cabinet /usr/local/lib/mole-cabinet
+if [[ ! -e /etc/mole-cabinet/cabinet.conf ]]; then
+    cat > /etc/mole-cabinet/cabinet.conf <<'CONFIG'
+# Bash configuration, owned by root. Edit before installing autostart.
+IMAGE='myst1cus/mole-game:latest'
+CONTAINER_NAME='mole-game'
+# Prefer /dev/serial/by-id/...; empty selects the only USB serial device.
+SERIAL_DEVICE=''
+# Publish the status API on the cabinet LAN address.
+STATUS_BIND='0.0.0.0'
+STATUS_PORT=8080
+CONFIG
+    chmod 0600 /etc/mole-cabinet/cabinet.conf
+fi
+systemctl is-active --quiet docker
+printf '\nProvisioning complete. Edit /etc/mole-cabinet/cabinet.conf, then run:\n  sudo bash misc/linux_bash_daemon\nReboot afterward. Configure BIOS power-on-after-AC-loss separately.\n'

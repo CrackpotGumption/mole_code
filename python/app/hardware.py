@@ -287,7 +287,7 @@ class ArduinoController:
             if self.event_handler:
 
                 self.event_queue.put(
-                    text
+                    (text, time.monotonic())
                 )
 
 
@@ -305,7 +305,7 @@ class ArduinoController:
 
             try:
 
-                text = self.event_queue.get(
+                text, received_at = self.event_queue.get(
                     timeout=0.1
                 )
 
@@ -318,7 +318,7 @@ class ArduinoController:
                 if self.event_handler:
 
                     self.event_handler(
-                        text
+                        text, received_at=received_at
                     )
 
             except Exception as e:
@@ -339,9 +339,16 @@ class ArduinoController:
     # queued hardware command has been processed.
     # ========================================================
 
-    def wait_until_idle(self):
-
-        self.command_queue.join()
+    def wait_until_idle(self, timeout=5.0):
+        deadline = time.monotonic() + timeout
+        with self.command_queue.all_tasks_done:
+            while self.command_queue.unfinished_tasks:
+                if not self.running:
+                    raise RuntimeError("Arduino disconnected while processing commands")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Arduino command queue did not drain")
+                self.command_queue.all_tasks_done.wait(min(remaining, 0.1))
 
 
     # ========================================================

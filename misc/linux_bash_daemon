@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Install autostart after linux_setup: sudo bash misc/linux_bash_daemon
+set -Eeuo pipefail
+[[ $EUID -eq 0 ]] || { echo 'Run with sudo.' >&2; exit 1; }
+for command in docker curl python3 systemctl timeout flock; do
+    command -v "$command" >/dev/null || { echo "Missing $command; run linux_setup first." >&2; exit 1; }
+done
+[[ -f /etc/mole-cabinet/cabinet.conf ]] || { echo 'Run linux_setup first.' >&2; exit 1; }
+install -d -m 0755 /usr/local/lib/mole-cabinet
+cat > /usr/local/lib/mole-cabinet/launch <<'LAUNCHER'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+source /etc/mole-cabinet/cabinet.conf
+[[ -n ${IMAGE:-} && $IMAGE != *REPLACE_WITH* ]] || { echo "Set IMAGE in /etc/mole-cabinet/cabinet.conf before starting." >&2; exit 1; }
+exec 9>/run/mole-cabinet.lock
+flock -n 9 || exit 0
+[[ $CONTAINER_NAME =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || exit 1
+[[ $STATUS_PORT =~ ^[0-9]+$ ]] && ((STATUS_PORT > 0 && STATUS_PORT < 65536)) || exit 1
+# Wait for USB enumeration, never guess between multiple connected devices.
+for ((attempt=0; attempt<30; attempt++)); do
+    if [[ -n $SERIAL_DEVICE ]]; then
+        [[ -c $SERIAL_DEVICE ]] && break
+    else
+        shopt -s nullglob
+        devices=(/dev/serial/by-id/*)
+        if ((${#devices[@]} == 0)); then devices=(/dev/ttyACM* /dev/ttyUSB*); fi
+        if ((${#devices[@]} == 1)) && [[ -c ${devices[0]} ]]; then
+            SERIAL_DEVICE=${devices[0]}
+            break
+        fi
+    fi
+    sleep 2
+done
+[[ -n $SERIAL_DEVICE && -c $SERIAL_DEVICE ]] || { echo 'Arduino missing or ambiguous; set SERIAL_DEVICE.' >&2; exit 1; }
+# A failed pull preserves the previously installed image/container.
+if ! timeout 45 docker pull "$IMAGE"; then
+    echo 'Image pull failed; using installed image if available.' >&2
+fi
+if ! image_id=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null); then
+    # A previously installed container may reference an image with no tag left.
+    image_id=$(docker inspect --format '{{.Image}}' "$CONTAINER_NAME" 2>/dev/null) || {
+        echo 'No cached game image. Connect once or load an image with docker load.' >&2
+        exit 1
+    }
+    docker image inspect "$image_id" >/dev/null
+fi
+healthy() {
+    [[ $(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null) == true ]] || return 1
+    docker exec "$CONTAINER_NAME" python -c \
+        'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/state", timeout=2).read()' >/dev/null 2>&1
+}
+wait_healthy() {
+    for ((check=0; check<30; check++)); do
+        if healthy; then return 0; fi
+        sleep 2
+    done
+    return 1
+}
+launch_game() {
+    local backup="${CONTAINER_NAME}-previous" had_previous=false
+    # Never overwrite an unresolved rollback container.
+    if docker container inspect "$backup" >/dev/null 2>&1; then
+        echo "Resolve existing rollback container $backup before updating." >&2
+        return 1
+    fi
+    if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+        had_previous=true
+        docker stop --time 15 "$CONTAINER_NAME" >/dev/null
+        docker rename "$CONTAINER_NAME" "$backup"
+    fi
+    if docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
+        --device "$SERIAL_DEVICE:/dev/cabinet-arduino" \
+        --env ARDUINO_PORT=/dev/cabinet-arduino --env STATUS_PORT=8080 \
+        --publish "$STATUS_BIND:$STATUS_PORT:8080" \
+        --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
+        --label mole-cabinet.managed=true "$image_id" && wait_healthy; then
+        if [[ $had_previous == true ]]; then docker rm "$backup" >/dev/null; fi
+        echo 'Mole Game is running; state endpoint responds.'
+        return 0
+    fi
+    echo 'New game failed startup; restoring previous container.' >&2
+    docker logs --tail 50 "$CONTAINER_NAME" >&2 || true
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    if [[ $had_previous == true ]]; then
+        docker rename "$backup" "$CONTAINER_NAME"
+        docker start "$CONTAINER_NAME" >/dev/null
+    fi
+    return 1
+}
+
+launch_game
+LAUNCHER
+chmod 0755 /usr/local/lib/mole-cabinet/launch
+cat > /etc/systemd/system/mole-cabinet.service <<'UNIT'
+[Unit]
+Description=Update and launch Mole Game cabinet
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/mole-cabinet/launch
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+# Disable the old boot hook so two launchers cannot compete.
+if systemctl cat run-plainraw.service >/dev/null 2>&1; then
+    systemctl disable --now run-plainraw.service
+fi
+systemctl daemon-reload
+systemctl enable mole-cabinet.service
+printf 'Autostart installed. Start now with: sudo systemctl start mole-cabinet\nLogs: sudo journalctl -u mole-cabinet -f\n'

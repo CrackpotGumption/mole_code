@@ -57,9 +57,10 @@ class StatusService:
 
                 if self.path == "/health":
 
-                    body = b'{"status":"ok"}'
+                    connected = service.game.arduino.running
+                    body = json.dumps({"status": "ok" if connected else "disconnected"}).encode("utf-8")
 
-                    self.send_response(200)
+                    self.send_response(200 if connected else 503)
 
                     self.send_header(
                         "Content-Type",
@@ -113,3 +114,7 @@ class StatusService:
             f"Status service running "
             f"on port {self.port}"
         )
+
+    def stop(self):
+        self.server.shutdown()
+        self.server.server_close()
