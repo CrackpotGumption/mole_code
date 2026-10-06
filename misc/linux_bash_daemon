@@ -77,6 +77,7 @@ launch_game() {
         --env ARDUINO_PORT=/dev/cabinet-arduino --env STATUS_PORT=8080 \
         --env GAME_STATE_PATH=/data/progress.json \
         --env "FAILURE_SECONDS=${FAILURE_SECONDS:-15}" \
+        --env "VICTORY_SECONDS=${VICTORY_SECONDS:-45}" \
         --env "AUDIO_DEVICE=${AUDIO_DEVICE:-default}" \
         --env "AUDIO_ENABLED=${AUDIO_ENABLED:-1}" \
         "${audio_args[@]}" \

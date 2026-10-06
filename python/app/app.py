@@ -46,6 +46,7 @@ def main():
         audio = AudioCues()
         game = MoleGame(arduino, state_path=os.environ.get("GAME_STATE_PATH") or None,
                         audio=audio, failure_seconds=os.environ.get("FAILURE_SECONDS", "15"),
+                        victory_seconds=os.environ.get("VICTORY_SECONDS", "45"),
                         stop_requested=stopped.is_set)
         game.restore_hardware()
         arduino.event_handler = game.handle_arduino_event

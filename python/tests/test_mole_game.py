@@ -10,6 +10,15 @@ class Hardware:
     def __init__(self):
         self.commands = []
 
+    def begin_sensor_capture(self):
+        pass
+
+    def end_sensor_capture(self):
+        pass
+
+    def read_captured_samples(self):
+        return []
+
     def send(self, command):
         self.commands.append(command)
 
@@ -23,7 +32,7 @@ class AccelGameTests(unittest.TestCase):
         self.output.__enter__()
         self.addCleanup(self.output.__exit__, None, None, None)
         self.hardware = Hardware()
-        self.game = MoleGame(self.hardware)
+        self.game = MoleGame(self.hardware, victory_seconds=0)
         self.game.handle_rfid("001")
 
     def sample(self, mole, z=-9000, timestamp=None, channel=None):

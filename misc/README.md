@@ -74,3 +74,15 @@ removing the offline fallback image.
 
 Hardware-free verification:
 `python3 -B -m unittest discover -s misc/tests -v`
+
+Audio defaults to enabled when the host has `/dev/snd`; playback uses the
+container's ALSA device. Set `AUDIO_DEVICE` for the actual cabinet speaker,
+`AUDIO_ENABLED=0` for silent operation, and `FAILURE_SECONDS` for the failure
+animation duration (default 15 seconds). Existing config files are preserved:
+add these keys manually if desired. See `python/README.md` for sound replacement
+and device-check instructions.
+
+The final winning celebration uses `VICTORY_SECONDS` (default 45). It needs the
+updated `MOLE_FINAL_NO_INTERVAL_v1` Arduino firmware for nonblocking tickets
+and RGB player indicators. Update both the image and firmware for interactive
+bashing during payout; see `python/README.md`.

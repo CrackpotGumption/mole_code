@@ -1447,129 +1447,57 @@ void ticketMotor(
 // DISPENSE TICKETS
 // ============================================================
 
-bool dispenseTickets(
-  int count
-) {
+// Nonblocking ticket payout: loop() keeps servicing serial and accelerometers.
+bool ticketPayoutActive = false;
+int ticketTarget = 0;
+int ticketDispensed = 0;
+int ticketLastSensorState = HIGH;
+unsigned long ticketPayoutStart = 0;
+unsigned long ticketLastPulse = 0;
 
-  if (
-    count <= 0
-  ) {
-    return true;
+bool dispenseTickets(int count) {
+  if (ticketPayoutActive) {
+    Serial.println("ERROR TICKET BUSY");
+    return false;
   }
-
-
-  Serial.print(
-    "TICKET_START "
-  );
-
-  Serial.println(
-    count
-  );
-
-
-  int dispensed =
-    0;
-
-
-  int lastSensorState =
-    digitalRead(
-      TICKET_SENSOR_PIN
-    );
-
-
-  unsigned long startTime =
-    millis();
-
-
-  unsigned long maxTime =
-    TICKET_TIMEOUT_PER_TICKET
-    * count;
-
-
-  ticketMotor(
-    true
-  );
-
-
-  while (
-    dispensed < count
-  ) {
-
-    int currentState =
-      digitalRead(
-        TICKET_SENSOR_PIN
-      );
-
-
-    if (
-      currentState ==
-        TICKET_SENSOR_ACTIVE
-      &&
-      lastSensorState !=
-        TICKET_SENSOR_ACTIVE
-    ) {
-
-      dispensed++;
-
-
-      Serial.print(
-        "TICKET_COUNT "
-      );
-
-      Serial.println(
-        dispensed
-      );
-
-
-      delay(25);
-    }
-
-
-    lastSensorState =
-      currentState;
-
-
-    if (
-      millis() - startTime
-      > maxTime
-    ) {
-
-      ticketMotor(
-        false
-      );
-
-
-      Serial.print(
-        "TICKET_ERROR TIMEOUT "
-      );
-
-      Serial.println(
-        dispensed
-      );
-
-
-      return false;
-    }
-  }
-
-
-  ticketMotor(
-    false
-  );
-
-
-  Serial.print(
-    "TICKET_DONE "
-  );
-
-  Serial.println(
-    dispensed
-  );
-
-
+  ticketTarget = count;
+  ticketDispensed = 0;
+  ticketLastSensorState = digitalRead(TICKET_SENSOR_PIN);
+  ticketPayoutStart = millis();
+  ticketLastPulse = ticketPayoutStart - 25;
+  ticketPayoutActive = true;
+  ticketMotor(true);
+  Serial.print("TICKET_START ");
+  Serial.println(count);
+  Serial.print("OK TICKET STARTED ");
+  Serial.println(count);
   return true;
 }
 
+void updateTickets() {
+  if (!ticketPayoutActive) return;
+  unsigned long now = millis();
+  int sensor = digitalRead(TICKET_SENSOR_PIN);
+  if (sensor == TICKET_SENSOR_ACTIVE && ticketLastSensorState != TICKET_SENSOR_ACTIVE
+      && now - ticketLastPulse >= 25) {
+    ticketDispensed++;
+    ticketLastPulse = now;
+    Serial.print("TICKET_COUNT ");
+    Serial.println(ticketDispensed);
+  }
+  ticketLastSensorState = sensor;
+  if (ticketDispensed >= ticketTarget) {
+    ticketMotor(false);
+    ticketPayoutActive = false;
+    Serial.print("TICKET_DONE ");
+    Serial.println(ticketDispensed);
+  } else if (now - ticketPayoutStart > TICKET_TIMEOUT_PER_TICKET * ticketTarget) {
+    ticketMotor(false);
+    ticketPayoutActive = false;
+    Serial.print("TICKET_ERROR TIMEOUT ");
+    Serial.println(ticketDispensed);
+  }
+}
 
 // ============================================================
 // STATUS
@@ -1810,6 +1738,18 @@ void handleCommand(
   // ----------------------------------------------------------
   // PLAYER LIGHT
   // ----------------------------------------------------------
+
+  int rgbPlayer, playerR, playerG, playerB;
+  if (sscanf(command.c_str(), "PLAYER_LIGHT %d %d %d %d",
+      &rgbPlayer, &playerR, &playerG, &playerB) == 4) {
+    if (rgbPlayer < 0 || rgbPlayer >= PLAYER_COUNT) {
+      Serial.println("ERROR BAD PLAYER");
+      return;
+    }
+    setPlayerLight(rgbPlayer, playerR, playerG, playerB);
+    Serial.println("OK PLAYER_LIGHT RGB");
+    return;
+  }
 
   int player;
   char playerAction[16];
@@ -2202,6 +2142,8 @@ void loop() {
   checkRFID();
 
   checkForHits();
+
+  updateTickets();
 
   reportI2CTimeoutIfNeeded();
 }

@@ -17,7 +17,7 @@ class ProgressTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.path = Path(temporary.name) / 'progress.json'
         self.hardware = Hardware()
-        self.game = MoleGame(self.hardware, state_path=self.path)
+        self.game = MoleGame(self.hardware, state_path=self.path, victory_seconds=0)
         output = contextlib.redirect_stdout(io.StringIO())
         output.__enter__()
         self.addCleanup(output.__exit__, None, None, None)
@@ -35,7 +35,7 @@ class ProgressTests(unittest.TestCase):
         self.game.handle_rfid('004')
         self.game.handle_hit(MOLE_ID_BY_NAME[self.game.state.whack_order[0]])
         hardware = Hardware()
-        restored = MoleGame(hardware, state_path=self.path)
+        restored = MoleGame(hardware, state_path=self.path, victory_seconds=0)
         restored.restore_hardware()
         self.assertEqual(restored.state.completed_players, {'001', '002', '003'})
         self.assertIsNone(restored.state.active_player)
@@ -54,7 +54,7 @@ class ProgressTests(unittest.TestCase):
         for player in PLAYER_IDS:
             self.complete(player)
         hardware = Hardware()
-        restored = MoleGame(hardware, state_path=self.path)
+        restored = MoleGame(hardware, state_path=self.path, victory_seconds=0)
         restored.restore_hardware()
         self.assertEqual(restored.state.status, 'GAME COMPLETE')
         self.assertTrue(restored.state.ticket_dispensed)
@@ -63,7 +63,7 @@ class ProgressTests(unittest.TestCase):
     def test_final_completion_saved_before_payout_intent(self):
         ProgressStore(self.path, PLAYER_IDS).save(set(PLAYER_IDS), False)
         hardware = Hardware()
-        restored = MoleGame(hardware, state_path=self.path)
+        restored = MoleGame(hardware, state_path=self.path, victory_seconds=0)
         restored.restore_hardware()
         self.assertEqual(hardware.commands.count('TICKET 8'), 1)
         self.assertTrue(ProgressStore(self.path, PLAYER_IDS).load()[1])
@@ -88,13 +88,13 @@ class ProgressTests(unittest.TestCase):
                                     'ticket_requested': False})):
             self.path.write_text(payload)
             with self.assertRaises(ValueError):
-                MoleGame(Hardware(), state_path=self.path)
+                MoleGame(Hardware(), state_path=self.path, victory_seconds=0)
             self.assertEqual(self.path.read_text(), payload)
 
     def test_payout_intent_survives_failed_ticket_command(self):
         ProgressStore(self.path, PLAYER_IDS).save(set(PLAYER_IDS), False)
         hardware = Hardware()
-        restored = MoleGame(hardware, state_path=self.path)
+        restored = MoleGame(hardware, state_path=self.path, victory_seconds=0)
         original_send = hardware.send
 
         def send(command):
@@ -106,7 +106,7 @@ class ProgressTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             restored.restore_hardware()
         next_hardware = Hardware()
-        next_game = MoleGame(next_hardware, state_path=self.path)
+        next_game = MoleGame(next_hardware, state_path=self.path, victory_seconds=0)
         next_game.restore_hardware()
         self.assertNotIn('TICKET 8', next_hardware.commands)
 

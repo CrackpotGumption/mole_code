@@ -43,6 +43,10 @@ CONTAINER_NAME='mole-game'
 SERIAL_DEVICE='/dev/serial/by-id/REPLACE_WITH_YOUR_ARDUINO'
 STATUS_BIND='0.0.0.0'
 STATUS_PORT=8080
+FAILURE_SECONDS=15
+VICTORY_SECONDS=45
+AUDIO_ENABLED=1
+AUDIO_DEVICE='default'
 ```
 
 If `SERIAL_DEVICE` is empty, the launcher selects a USB serial device only when

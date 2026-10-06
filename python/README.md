@@ -72,3 +72,71 @@ intent and actual dispensing can leave tickets unpaid; physical payout
 confirmation still needs separate handling. A completed six-player game stays
 completed across restarts; starting a new group requires clearing its checkpoint
 while the controller is stopped. An automatic/session reset is not implemented.
+
+## Audio and the failure show
+
+An accepted hit plays `mole_hit.wav`, and each ready puzzle plays
+`game_start.wav`. A wrong hit enters `LAUGH AT YOU` for `FAILURE_SECONDS`
+(default 15; allowed 0–120). Sensor reporting stays active while puzzle scoring remains locked.
+Random groups of one to three moles move every approximately half second,
+and all five mole lights flash randomized colors. All three laugh placeholders
+are mixed together and repeated randomly for the configured duration. The
+playfield then retracts and the same player starts the same puzzle again.
+A failure-show strike retracts that mole, cuts laughter, plays a random
+`ouch_1`/`ouch_2`/`ouch_3` reaction, then raises a different mole and resumes
+laughter. Replacements wait for the reaction to finish. Another strike can
+interrupt the reaction with a new one; it does not extend the failure timer.
+Completed players and their indicators remain unchanged. Shutdown interrupts
+the show at its next step and prevents a puzzle restart.
+
+Placeholders live in `app/sounds`; see its README for replacement WAV format.
+The Docker image includes ALSA's `aplay`. The cabinet launcher passes through
+`/dev/snd` when present and disables audio when absent. No sound hardware,
+missing files, or playback errors do not prevent gameplay.
+
+Set these optional values in `/etc/mole-cabinet/cabinet.conf` and reinstall the
+launcher with `sudo bash misc/linux_bash_daemon` after copying the new script:
+
+```bash
+FAILURE_SECONDS=15
+VICTORY_SECONDS=45
+AUDIO_ENABLED=1
+AUDIO_DEVICE='default'
+```
+
+Then apply them with `sudo systemctl restart mole-cabinet` between games.
+List actual sound devices with `sudo docker exec mole-game aplay -l` and logical
+ALSA names with `sudo docker exec mole-game aplay -L`. If `default` is not the
+cabinet speaker, set `AUDIO_DEVICE` to the appropriate name (for example
+`plughw:0,0`, using the card/device numbers shown on that machine).
+Manual `docker run` needs `--device /dev/snd:/dev/snd` for playback; without a
+sound device, set `-e AUDIO_ENABLED=0`. Physical audio and pneumatic timing
+still need cabinet verification.
+
+## Final victory celebration
+
+The sixth completed player starts a `VICTORY CELEBRATION` lasting
+`VICTORY_SECONDS` (default 45, allowed 0–120). Ticket payout starts alongside
+this show, while all five mole lights and six player lights cycle through
+rainbow colors. Cheering, whistles, and an "oooooo"/kiss placeholder mix plays.
+A raised mole can be bashed: it retracts, the mix stops for an encouraging
+whistle, then a different mole rises and the victory mix resumes. Hits do not
+change completed players or request extra tickets. A reaction does not extend
+the timer. At the end moles retract, sound stops, and all six player indicators
+return to green. The game remains completed.
+
+**Flash the updated `arduino/MOLE_FINAL_NO_INTERVAL_v1` firmware before using
+this feature.** Ticket dispensing is now nonblocking, so serial command and
+accelerometer polling continue while the motor runs. The firmware also accepts
+`PLAYER_LIGHT <index> <r> <g> <b>` for rainbow player lights. Older firmware
+blocks during payout and doesn't support these player RGB commands.
+
+`/state` includes `ticket_status` and `tickets_dispensed` from Arduino payout
+reports. Jam/timeout events set the ticket status to `ERROR`; the motor shuts
+itself off. These live reports don't change the earlier recovery guarantee:
+ticket request intent is saved, while delivery after power loss remains
+unconfirmed and is not automatically retried.
+
+Set `VICTORY_SECONDS=45` in cabinet.conf, copy/reinstall the updated launcher,
+and restart the cabinet service between games to apply it. The image and
+firmware both need updating. WAV replacements are described in `app/sounds`.

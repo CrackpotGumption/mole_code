@@ -1,3 +1,5 @@
+import colorsys
+import math
 import random
 import time
 import threading
@@ -296,6 +298,8 @@ class GameState:
     status: str = "WAITING FOR BADGE"
 
     ticket_dispensed: bool = False
+    ticket_status: str = "NOT REQUESTED"
+    tickets_dispensed: int = 0
 
 
 # ============================================================
@@ -315,6 +319,7 @@ class MoleGame:
         state_path=None,
         audio=None,
         failure_seconds=15.0,
+        victory_seconds=45.0,
         stop_requested=None,
     ):
 
@@ -322,6 +327,9 @@ class MoleGame:
         self.audio = audio or SilentAudio()
         self.stop_requested = stop_requested or (lambda: False)
         self.failure_seconds = float(failure_seconds)
+        self.victory_seconds = float(victory_seconds)
+        if not 0 <= self.victory_seconds <= 120:
+            raise ValueError("VICTORY_SECONDS must be between 0 and 120")
         if not 0 <= self.failure_seconds <= 120:
             raise ValueError("FAILURE_SECONDS must be between 0 and 120")
 
@@ -337,6 +345,8 @@ class MoleGame:
             completed, ticket_requested = self._progress_store.load()
             self.state.completed_players = completed
             self.state.ticket_dispensed = ticket_requested
+            if ticket_requested:
+                self.state.ticket_status = "REQUESTED - DELIVERY UNCONFIRMED"
 
     def _save_progress(self):
         if self._progress_store is None:
@@ -1138,36 +1148,140 @@ class MoleGame:
         self.start_new_round()
 
 
+    def _failure_strike(self, line, received_at, raised, raised_at, latched, last_hit, pending, deadline, victory=False):
+        parts = line.split()
+        try:
+            if len(parts) == 6 and parts[0] == "ACCEL":
+                mole, channel, x, y, z = map(int, parts[1:])
+                if any(value < -32768 or value > 32767 for value in (x, y, z)):
+                    return
+                if z > self.HIT_RELEASE_Z:
+                    if received_at >= raised_at.get(mole, float("inf")):
+                        latched.discard(mole)
+                    return
+                if z > self.HIT_Z_THRESHOLD:
+                    return
+            elif len(parts) == 4 and parts[0] == "HIT":
+                mole, channel, strength = map(int, parts[1:])
+                z = None
+            else:
+                return
+        except ValueError:
+            return
+        if (mole not in raised or self.SENSOR_CHANNELS.get(mole) != channel
+                or received_at < raised_at[mole]
+                or (z is not None and mole in latched)
+                or received_at - last_hit.get(mole, float("-inf")) < self.HIT_COOLDOWN):
+            return
+        latched.add(mole)
+        last_hit[mole] = received_at
+        # Mark down first so retraction vibration cannot cause another strike.
+        raised.remove(mole)
+        self.arduino.send(f"MOLE {mole} DOWN")
+        self.arduino.send(f"LIGHT {mole} OFF")
+        # Cut laughter and play the reaction before any replacement rises.
+        reaction = self.audio.play_victory_hit if victory else self.audio.play_failure_hit
+        delay = reaction(max(0, deadline - time.monotonic()))
+        ready_at = time.monotonic() + delay
+        candidates = [candidate for candidate in range(5)
+                      if candidate not in raised and candidate not in pending and candidate != mole]
+        if candidates:
+            pending[random.choice(candidates)] = ready_at
+        # Another strike cuts the previous reaction too; defer all replacements
+        # until this latest reaction is finished.
+        for replacement in pending:
+            pending[replacement] = ready_at
+
     def run_failure_show(self):
-        self.state.status = "LAUGH AT YOU"
+        self._run_show(self.failure_seconds)
+
+    def run_victory_show(self):
+        self._run_show(self.victory_seconds, victory=True,
+                       on_start=lambda: self.arduino.send("TICKET 8"))
+
+    def _run_show(self, seconds, victory=False, on_start=None):
+        self.state.status = "VICTORY CELEBRATION" if victory else "LAUGH AT YOU"
         self._accept_samples_after = float("inf")
         self.arduino.wait_until_idle()
-        self.audio.play_failure(self.failure_seconds)
-        deadline = time.monotonic() + self.failure_seconds
-        raised = set()
-        # Bound iterations as well as elapsed time, including in simulations.
+        if self.stop_requested():
+            return
+        if seconds <= 0:
+            if on_start is not None:
+                on_start()
+            return
+        if victory:
+            self.audio.play_victory(seconds)
+        else:
+            self.audio.play_failure(seconds)
+        deadline = time.monotonic() + seconds
+        next_motion = time.monotonic()
+        next_rainbow = next_motion
+        raised, raised_at, latched, last_hit = set(), {}, set(), {}
+        pending = {}
+        self.arduino.begin_sensor_capture()
         try:
-            for _ in range(int(self.failure_seconds / 0.5 + 0.999)):
-                remaining = deadline - time.monotonic()
-                if remaining <= 0 or self.stop_requested():
+            self.arduino.send("SENSORS ENABLE")
+            self.arduino.wait_until_idle()
+            if on_start is not None:
+                on_start()
+            # Poll strikes at 50 Hz; random motion/light changes remain at 2 Hz.
+            for _ in range(math.ceil(seconds / 0.02) + 1):
+                now = time.monotonic()
+                if now >= deadline or self.stop_requested():
                     break
-                step_start = time.monotonic()
-                selected = set(random.sample(range(5), random.randint(1, 3)))
-                for mole in sorted(raised - selected):
-                    self.arduino.send(f"MOLE {mole} DOWN")
-                for mole in sorted(selected - raised):
+                for line, received_at in self.arduino.read_captured_samples():
+                    if line.startswith("TICKET_"):
+                        self._handle_ticket_event(line)
+                    else:
+                        self._failure_strike(line, received_at, raised, raised_at, latched,
+                                             last_hit, pending, deadline, victory=victory)
+                ready = [mole for mole, ready_at in pending.items() if now >= ready_at]
+                for mole in ready:
+                    pending.pop(mole)
+                    raised.add(mole)
+                    raised_at[mole] = time.monotonic()
                     self.arduino.send(f"MOLE {mole} UP")
-                raised = selected
-                for mole in range(5):
                     r, g, b = random.choice(tuple(RGB.values()))
                     self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
+                if ready:
+                    next_motion = now + 0.5
+                if now >= next_motion and not pending:
+                    selected = set(random.sample(range(5), random.randint(1, 3)))
+                    for mole in sorted(raised - selected):
+                        self.arduino.send(f"MOLE {mole} DOWN")
+                    for mole in sorted(selected - raised):
+                        raised_at[mole] = time.monotonic()
+                        self.arduino.send(f"MOLE {mole} UP")
+                    raised = selected
+                    if not victory:
+                        for mole in range(5):
+                            r, g, b = random.choice(tuple(RGB.values()))
+                            self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
+                    next_motion = now + 0.5
+                if victory and now >= next_rainbow:
+                    for mole in range(5):
+                        rgb = colorsys.hsv_to_rgb((now / 3 + mole / 5) % 1, 1, 1)
+                        r, g, b = (int(channel * 255) for channel in rgb)
+                        self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
+                    for player in range(6):
+                        rgb = colorsys.hsv_to_rgb((now / 3 + player / 6) % 1, 1, 1)
+                        r, g, b = (int(channel * 255) for channel in rgb)
+                        self.arduino.send(f"PLAYER_LIGHT {player} {r} {g} {b}")
+                    next_rainbow = now + 0.5
                 self.arduino.wait_until_idle()
-                time.sleep(max(0, min(deadline - time.monotonic(),
-                                      0.5 - (time.monotonic() - step_start))))
+                time.sleep(max(0, min(0.02, deadline - time.monotonic())))
         finally:
+            self.arduino.send("SENSORS DISABLE")
             self.arduino.send("MOLES ALL DOWN")
             self.arduino.send("LIGHTS OFF")
-            self.arduino.wait_until_idle()
+            try:
+                self.arduino.wait_until_idle()
+            finally:
+                self.arduino.end_sensor_capture()
+                self.audio.stop_show()
+                if victory:
+                    for player in PLAYER_IDS:
+                        self.arduino.send(f"PLAYER_LIGHT {PLAYER_INDEX[player]} GREEN")
 
     # ========================================================
     # PLAYER COMPLETE
@@ -1339,7 +1453,9 @@ class MoleGame:
             # duplicate requests after reboot, but cannot confirm physical delivery.
             self.state.ticket_dispensed = True
             self._save_progress()
-            self.arduino.send("TICKET 8")
+            self.state.ticket_status = "REQUESTED"
+            self.run_victory_show()
+            self.state.status = "GAME COMPLETE"
 
 
     # ========================================================
@@ -1408,6 +1524,23 @@ class MoleGame:
     # ARDUINO EVENT HANDLER
     # ========================================================
 
+    def _handle_ticket_event(self, line):
+        parts = line.split()
+        try:
+            if len(parts) == 2 and parts[0] == "TICKET_START" and int(parts[1]) == 8:
+                self.state.ticket_status = "DISPENSING"
+            elif len(parts) == 2 and parts[0] in ("TICKET_COUNT", "TICKET_DONE"):
+                count = int(parts[1])
+                if not 0 <= count <= 8:
+                    return
+                self.state.tickets_dispensed = count
+                self.state.ticket_status = ("DONE" if count == 8 else "ERROR") if parts[0] == "TICKET_DONE" else "DISPENSING"
+            elif len(parts) == 3 and parts[:2] == ["TICKET_ERROR", "TIMEOUT"]:
+                self.state.tickets_dispensed = max(0, min(8, int(parts[2])))
+                self.state.ticket_status = "ERROR"
+        except ValueError:
+            return
+
     def handle_arduino_event(self, line, received_at=None):
         with self._event_lock:
             if not self._stopping and self.persistence_error is None:
@@ -1419,6 +1552,9 @@ class MoleGame:
         received_at=None,
     ):
 
+        if line.startswith("TICKET_"):
+            self._handle_ticket_event(line)
+            return
         parts = line.split()
 
 
@@ -1478,6 +1614,8 @@ class MoleGame:
             and
             len(parts) >= 4
         ):
+            if received_at is not None and received_at <= self._accept_samples_after:
+                return
 
             try:
 
@@ -1621,4 +1759,6 @@ class MoleGame:
 
             "ticket_dispensed":
                 self.state.ticket_dispensed,
+            "ticket_status": self.state.ticket_status,
+            "tickets_dispensed": self.state.tickets_dispensed,
         }

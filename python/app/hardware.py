@@ -29,6 +29,10 @@ class ArduinoController:
         # The serial reader must NEVER run game logic directly because
         # game logic may wait for command ACKs that only the reader can receive.
         self.event_queue = queue.Queue()
+        self._capture_lock = threading.Lock()
+        self._sensor_capture = False
+        self._captured_samples = queue.Queue(maxsize=256)
+        self._captured_ticket_events = queue.Queue()
 
         # Set by reader thread when Arduino replies
         # OK ... or ERROR ...
@@ -284,12 +288,44 @@ class ArduinoController:
             # HIT 3 4 5821
             # ------------------------------------------------
 
-            if self.event_handler:
+            self._queue_event(text, time.monotonic())
 
-                self.event_queue.put(
-                    (text, time.monotonic())
-                )
 
+    def _queue_event(self, text, received_at):
+        with self._capture_lock:
+            if self._sensor_capture and text.startswith("TICKET_"):
+                self._captured_ticket_events.put_nowait((text, received_at))
+            elif self._sensor_capture and text.startswith(("ACCEL ", "HIT ")):
+                if self._captured_samples.full():
+                    try:
+                        self._captured_samples.get_nowait()
+                        self._captured_samples.task_done()
+                    except queue.Empty:
+                        pass
+                self._captured_samples.put_nowait((text, received_at))
+            elif self.event_handler:
+                self.event_queue.put((text, received_at))
+
+    def begin_sensor_capture(self):
+        with self._capture_lock:
+            self._sensor_capture = True
+            self.read_captured_samples()
+
+    def end_sensor_capture(self):
+        with self._capture_lock:
+            self._sensor_capture = False
+            self.read_captured_samples()
+
+    def read_captured_samples(self):
+        samples = []
+        for events in (self._captured_ticket_events, self._captured_samples):
+            while True:
+                try:
+                    samples.append(events.get_nowait())
+                    events.task_done()
+                except queue.Empty:
+                    break
+        return samples
 
     # ========================================================
     # EVENT LOOP

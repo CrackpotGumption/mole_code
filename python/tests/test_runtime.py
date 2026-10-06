@@ -18,6 +18,15 @@ class Hardware:
         self.closed = False
         self.drained = False
 
+    def begin_sensor_capture(self):
+        pass
+
+    def end_sensor_capture(self):
+        pass
+
+    def read_captured_samples(self):
+        return []
+
     def send(self, command):
         self.commands.append(command)
 

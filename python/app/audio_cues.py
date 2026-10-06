@@ -22,6 +22,18 @@ class SilentAudio:
     def play_failure(self, seconds):
         pass
 
+    def play_failure_hit(self, seconds):
+        return min(0.6, seconds)
+
+    def play_victory(self, seconds):
+        pass
+
+    def play_victory_hit(self, seconds):
+        return min(0.6, seconds)
+
+    def stop_show(self):
+        pass
+
     def close(self):
         pass
 
@@ -36,22 +48,42 @@ def read_samples(path):
     return samples
 
 
-def failure_mix(directory, seconds, rng=None):
+def failure_mix(directory, seconds, rng=None, include_failure=True, victory=False):
     """Mix all laugh variants, then repeat randomly for the full failure state."""
     rng = rng or random.Random()
-    tracks = {name: read_samples(directory / f'{name}.wav')
-              for name in ('failure', 'laugh_1', 'laugh_2', 'laugh_3')}
+    names = ('cheer', 'whistle', 'kiss') if victory else ('laugh_1', 'laugh_2', 'laugh_3')
+    intro = 'victory' if victory else 'failure'
+    tracks = {name: read_samples(directory / f'{name}.wav') for name in (intro, *names)}
     mixed = [0] * math.ceil(seconds * SAMPLE_RATE)
-    schedule = [('failure', 0), ('laugh_1', 0.1), ('laugh_2', 0.4), ('laugh_3', 0.7)]
+    schedule = [(name, 0.1 + index * 0.3) for index, name in enumerate(names)]
+    if include_failure:
+        schedule.insert(0, (intro, 0))
     moment = 1.0
     while moment < seconds:
-        schedule.append((rng.choice(('laugh_1', 'laugh_2', 'laugh_3')), moment))
+        schedule.append((rng.choice(names), moment))
         moment += rng.uniform(0.35, 0.8)
     for name, moment in schedule:
         offset = int(moment * SAMPLE_RATE)
         for index, sample in enumerate(tracks[name][:max(0, len(mixed) - offset)]):
             mixed[offset + index] += int(sample * 0.3)
     output = array.array('h', (max(-32768, min(32767, sample)) for sample in mixed))
+    if sys.byteorder != 'little':
+        output.byteswap()
+    return output.tobytes()
+
+
+def reaction_mix(directory, seconds, cue, victory=False):
+    reaction = read_samples(directory / f'{cue}.wav')
+    total = math.ceil(seconds * SAMPLE_RATE)
+    reaction = reaction[:total]
+    output = array.array('h', (int(sample * 0.7) for sample in reaction))
+    remainder = total - len(output)
+    if remainder:
+        tail = array.array('h')
+        tail.frombytes(failure_mix(directory, remainder / SAMPLE_RATE, include_failure=False, victory=victory))
+        if sys.byteorder != 'little':
+            tail.byteswap()
+        output.extend(tail[:remainder])
     if sys.byteorder != 'little':
         output.byteswap()
     return output.tobytes()
@@ -66,6 +98,7 @@ class AudioCues(SilentAudio):
         self.stopped = threading.Event()
         self.process = None
         self.process_lock = threading.Lock()
+        self._generation = 0
         if self.enabled:
             self.worker = threading.Thread(target=self._loop, daemon=True)
             self.worker.start()
@@ -80,32 +113,72 @@ class AudioCues(SilentAudio):
                 pass
 
     def play(self, cue):
-        self._enqueue((cue, None))
+        if cue == 'game_start':
+            self._replace(cue, None)
+        else:
+            with self.process_lock:
+                self._enqueue((cue, None, self._generation))
 
-    def play_failure(self, seconds):
-        # Failure takes precedence over short cues queued immediately before it.
-        while True:
-            try:
-                self.queue.get_nowait()
-                self.queue.task_done()
-            except queue.Empty:
-                break
+    def _replace(self, cue, seconds):
         with self.process_lock:
+            self._generation += 1
+            while True:
+                try:
+                    self.queue.get_nowait()
+                    self.queue.task_done()
+                except queue.Empty:
+                    break
             if self.process is not None and self.process.poll() is None:
                 self.process.terminate()
-        self._enqueue(('failure_mix', seconds))
+            self._enqueue((cue, seconds, self._generation))
+
+    def play_failure(self, seconds):
+        self._replace('failure_mix', seconds)
+
+    def play_failure_hit(self, seconds):
+        cue = random.choice(('ouch_1', 'ouch_2', 'ouch_3'))
+        try:
+            duration = len(read_samples(self.directory / f'{cue}.wav')) / SAMPLE_RATE
+        except Exception:
+            duration = 0.6
+        self._replace(f'reaction:{cue}', seconds)
+        return min(duration, seconds)
+
+    def play_victory(self, seconds):
+        self._replace('victory_mix', seconds)
+
+    def play_victory_hit(self, seconds):
+        try:
+            duration = len(read_samples(self.directory / 'encouraging_whistle.wav')) / SAMPLE_RATE
+        except Exception:
+            duration = 0.6
+        self._replace('victory_reaction:encouraging_whistle', seconds)
+        return min(duration, seconds)
+
+    def stop_show(self):
+        with self.process_lock:
+            self._generation += 1
+            while True:
+                try:
+                    self.queue.get_nowait()
+                    self.queue.task_done()
+                except queue.Empty:
+                    break
+            if self.process is not None and self.process.poll() is None:
+                self.process.terminate()
 
     def _loop(self):
         while not self.stopped.is_set():
             try:
-                cue, seconds = self.queue.get(timeout=0.1)
+                cue, seconds, generation = self.queue.get(timeout=0.1)
             except queue.Empty:
                 continue
             try:
                 with tempfile.TemporaryDirectory(prefix='mole-audio-') as folder:
-                    if cue == 'failure_mix':
+                    if cue in ('failure_mix', 'victory_mix') or ':' in cue:
                         path = Path(folder) / 'failure.wav'
-                        samples = failure_mix(self.directory, seconds)
+                        samples = (reaction_mix(self.directory, seconds, cue.split(':')[1], victory=cue.startswith('victory_'))
+                                   if ':' in cue else failure_mix(self.directory, seconds, victory=cue == 'victory_mix'))
                         with wave.open(str(path), 'wb') as target:
                             target.setparams((1, 2, SAMPLE_RATE, 0, 'NONE', 'not compressed'))
                             target.writeframes(samples)
@@ -113,13 +186,13 @@ class AudioCues(SilentAudio):
                         path = self.directory / f'{cue}.wav'
                         read_samples(path)  # Validate replacements before invoking aplay.
                     with self.process_lock:
-                        if self.stopped.is_set():
+                        if self.stopped.is_set() or generation != self._generation:
                             continue
                         self.process = subprocess.Popen(['aplay', '-q', '-D', self.device, str(path)],
                                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     try:
                         result = self.process.wait(timeout=(seconds or 5) + 5)
-                        if result:
+                        if result and generation == self._generation and not self.stopped.is_set():
                             print(f'Audio playback failed: {cue}; check AUDIO_DEVICE.')
                     except subprocess.TimeoutExpired:
                         self.process.kill()
