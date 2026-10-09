@@ -1,5 +1,7 @@
 # Linux cabinet installation
 
+Client/admin portal integration: [complete API reference](API_REFERENCE.md) and [OpenAPI contract](openapi.json).
+
 Detailed instructions:
 - [API administration and recovery](API.md)
 - [Fresh Linux installation, including an optional clean OS reset](FRESH_LINUX_SETUP.md)

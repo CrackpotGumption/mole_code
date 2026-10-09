@@ -1,9 +1,10 @@
 # Cabinet administration API (application 3.2.0 / firmware 3.0.0)
 
+Client/admin portal integration: [complete API reference](API_REFERENCE.md) and [OpenAPI contract](openapi.json).
+
 The API is the normal cabinet administration interface. SSH is needed for initial
 installation and recovery when the API itself cannot start.
-The Python HTTP service starts before serial connection, hardware checks, progress
-loading or firmware upload. Faults stay visible; the process does not immediately
+The Python HTTP service starts before serial connection, hardware checks or firmware upload. Faults stay visible; the process does not immediately
 exit and lose its API when hardware is unavailable.
 
 ## Deploy once on existing cabinets
@@ -194,5 +195,5 @@ maintenance serial command. Power loss discards the staged restore, too.
 - Tokens/passwords, raw environment variables, SSH private keys and unrelated file
   contents are omitted. Resource snapshots/counters are observations, not an ongoing
   metrics database. Current serial receipts are bounded/in-memory; fault, firmware,
-  checkpoint, settings and host-job histories persist. The API reports no fictional
+  game-event, settings and host-job histories persist. The API reports no fictional
   physical measurements; unsupported sensors and absent host tools remain unknown.
