@@ -1471,6 +1471,7 @@ class MoleGame:
 
 
             print()
+            self.audio.play("cheer")
             print(
                 "Waiting for next player."
             )

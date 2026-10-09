@@ -2685,6 +2685,38 @@
             "items": {
               "type": "string"
             }
+          },
+          "last_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "categories": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "requested_device": {
+            "type": "string"
+          },
+          "usb_cards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "usb_id": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "additionalProperties": true

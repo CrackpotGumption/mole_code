@@ -91,15 +91,65 @@ def reaction_mix(directory, seconds, cue, victory=False):
     return output.tobytes()
 
 
+def category_mix(paths, seconds, rng=None, voices=None):
+    """Repeat random tracks on 2–3 lanes; concurrency never exceeds lane count."""
+    rng = rng or random.Random()
+    voices = rng.randint(2, 3) if voices is None else voices
+    tracks = [read_samples(path) for path in paths]
+    tracks = [track for track in tracks if track]
+    total = math.ceil(seconds * SAMPLE_RATE)
+    mixed = [0] * total
+    if tracks:
+        for lane in range(voices):
+            offset = int(lane * 0.15 * SAMPLE_RATE)
+            while offset < total:
+                track = rng.choice(tracks)
+                for index, sample in enumerate(track[:total - offset]):
+                    mixed[offset + index] += int(sample / max(voices, 1) * 0.8)
+                offset += len(track) + int(rng.uniform(0.2, 0.5) * SAMPLE_RATE)
+    output = array.array('h', (max(-32768, min(32767, sample)) for sample in mixed))
+    if sys.byteorder != 'little':
+        output.byteswap()
+    return output.tobytes()
+
+
+def select_audio_device(requested, root=Path('/proc/asound')):
+    """Use ALSA card names so USB selection survives card-number changes."""
+    cards = []
+    for path in sorted(root.glob('card[0-9]*')):
+        try:
+            if (path / 'usbid').is_file():
+                cards.append({'id': (path / 'id').read_text().strip(),
+                              'usb_id': (path / 'usbid').read_text().strip()})
+        except OSError:
+            continue
+    if requested not in ('default', 'usb'):
+        return requested, cards, None
+    if len(cards) == 1:
+        return f"plughw:CARD={cards[0]['id']},DEV=0", cards, None
+    if cards:
+        return requested, cards, 'Multiple USB audio cards; configure AUDIO_DEVICE with a specific ALSA card ID'
+    if requested == 'usb':
+        return requested, cards, 'No USB audio card detected'
+    return 'default', cards, None
+
+
 class AudioCues(SilentAudio):
     def __init__(self):
         self.directory = Path(os.environ.get('AUDIO_DIR', Path(__file__).parent / 'sounds'))
-        self.device = os.environ.get('AUDIO_DEVICE', 'default')
+        packaged = Path(__file__).parent / 'fx'
+        self.fx_directory = Path(os.environ.get('FX_DIR', packaged if packaged.exists() else Path(__file__).resolve().parents[2] / 'fx'))
+        self.last_files = []
+        self.requested_device = os.environ.get('AUDIO_DEVICE', 'default')
+        self.device, self.usb_cards, device_error = select_audio_device(self.requested_device)
         self.enabled = os.environ.get('AUDIO_ENABLED', '1') != '0' and shutil.which('aplay') is not None
         self.queue = queue.Queue(maxsize=8)
         self.stopped = threading.Event()
         self.process = None
-        self.last_error = None
+        self.last_error = device_error
+        if device_error:
+            self.enabled = False
+            print(f'AUDIO ERROR: {device_error}')
         self.last_cue = None
         self.process_lock = threading.Lock()
         self._generation = 0
@@ -116,7 +166,31 @@ class AudioCues(SilentAudio):
             except queue.Full:
                 pass
 
+    def category_files(self, category):
+        root = getattr(self, 'fx_directory', None)
+        if root is None:
+            return []
+        paths = sorted((root / category).glob('*.wav'))
+        if category == 'cheer':
+            paths += sorted((root / 'cheers').glob('*.wav'))
+        return paths
+
+    def choose_cue(self, cue):
+        category = {'mole_hit': 'hit', 'cheer': 'cheer', 'victory': 'victory'}.get(cue)
+        files = self.category_files(category) if category else []
+        return 'asset:' + str(random.choice(files)) if files else cue
+
     def play(self, cue):
+        original = cue
+        cue = self.choose_cue(cue)
+        if cue.startswith('asset:'):
+            if original == 'cheer':
+                # Let the final correct-hit cue finish before cheering.
+                with self.process_lock:
+                    self._enqueue((cue, None, self._generation))
+            else:
+                self._replace(cue, None)
+            return
         if cue == 'game_start':
             self._replace(cue, None)
         else:
@@ -140,6 +214,12 @@ class AudioCues(SilentAudio):
         self._replace('failure_mix', seconds)
 
     def play_failure_hit(self, seconds):
+        files = self.category_files('hit')
+        if files:
+            path = random.choice(files)
+            duration = len(read_samples(path)) / SAMPLE_RATE
+            self._replace('fx_reaction:' + str(path), seconds)
+            return min(duration, seconds)
         cue = random.choice(('ouch_1', 'ouch_2', 'ouch_3'))
         try:
             duration = len(read_samples(self.directory / f'{cue}.wav')) / SAMPLE_RATE
@@ -152,6 +232,12 @@ class AudioCues(SilentAudio):
         self._replace('victory_mix', seconds)
 
     def play_victory_hit(self, seconds):
+        files = self.category_files('hit')
+        if files:
+            path = random.choice(files)
+            duration = len(read_samples(path)) / SAMPLE_RATE
+            self._replace('fx_victory_reaction:' + str(path), seconds)
+            return min(duration, seconds)
         try:
             duration = len(read_samples(self.directory / 'encouraging_whistle.wav')) / SAMPLE_RATE
         except Exception:
@@ -179,7 +265,33 @@ class AudioCues(SilentAudio):
                 continue
             try:
                 with tempfile.TemporaryDirectory(prefix='mole-audio-') as folder:
-                    if cue in ('failure_mix', 'victory_mix') or ':' in cue:
+                    custom = None
+                    self.last_files = []
+                    if cue.startswith('asset:'):
+                        path = Path(cue.split(':', 1)[1])
+                        self.last_files = [str(path)]
+                        read_samples(path)
+                    elif cue == 'failure_mix' and self.category_files('laugh'):
+                        paths = self.category_files('laugh')
+                        voices = random.randint(2, 3)
+                        chosen = random.sample(paths, min(voices, len(paths)))
+                        self.last_files = [str(path) for path in chosen]
+                        custom = category_mix(chosen, seconds, voices=voices)
+                    elif cue == 'victory_mix' and self.category_files('victory'):
+                        path = random.choice(self.category_files('victory'))
+                        self.last_files = [str(path)]
+                        read_samples(path)
+                    elif cue.startswith(('fx_reaction:', 'fx_victory_reaction:')):
+                        path = Path(cue.split(':', 1)[1])
+                        self.last_files = [str(path)]
+                        reaction = read_samples(path)[:math.ceil(seconds * SAMPLE_RATE)]
+                        remaining = max(0, seconds - len(reaction) / SAMPLE_RATE)
+                        tail = (category_mix(self.category_files('laugh'), remaining)
+                                if cue.startswith('fx_reaction:') else bytes(math.ceil(remaining * SAMPLE_RATE) * 2))
+                        if sys.byteorder != 'little':
+                            reaction.byteswap()
+                        custom = reaction.tobytes() + tail
+                    elif cue in ('failure_mix', 'victory_mix') or ':' in cue:
                         path = Path(folder) / 'failure.wav'
                         samples = (reaction_mix(self.directory, seconds, cue.split(':')[1], victory=cue.startswith('victory_'))
                                    if ':' in cue else failure_mix(self.directory, seconds, victory=cue == 'victory_mix'))
@@ -189,6 +301,12 @@ class AudioCues(SilentAudio):
                     else:
                         path = self.directory / f'{cue}.wav'
                         read_samples(path)  # Validate replacements before invoking aplay.
+                    if custom is not None:
+                        path = Path(folder) / 'category.wav'
+                        with wave.open(str(path), 'wb') as target:
+                            target.setparams((1, 2, SAMPLE_RATE, 0, 'NONE', 'not compressed'))
+                            target.writeframes(custom)
+                    duration = len(read_samples(path)) / SAMPLE_RATE
                     with self.process_lock:
                         if self.stopped.is_set() or generation != self._generation:
                             continue
@@ -196,7 +314,7 @@ class AudioCues(SilentAudio):
                         self.process = subprocess.Popen(['aplay', '-q', '-D', self.device, str(path)],
                                                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                     try:
-                        _, stderr = self.process.communicate(timeout=(seconds or 5) + 5)
+                        _, stderr = self.process.communicate(timeout=max(seconds or 0, duration) + 5)
                         result = self.process.returncode
                         if result and generation == self._generation and not self.stopped.is_set():
                             self.last_error = f'Audio playback failed: {cue}: {stderr.decode(errors="replace")[-4096:]}'
@@ -226,8 +344,11 @@ class AudioCues(SilentAudio):
     def get_diagnostics(self):
         with self.process_lock:
             return {'enabled': self.enabled, 'device': self.device,
+                    'requested_device': self.requested_device, 'usb_cards': self.usb_cards,
                     'queue_depth': self.queue.qsize(), 'last_cue': self.last_cue,
                     'last_error': self.last_error,
                     'playing': self.process is not None and self.process.poll() is None,
                     'worker_alive': self.worker.is_alive() if self.enabled else False,
-                    'available_cues': sorted(path.stem for path in self.directory.glob('*.wav'))}
+                    'last_files': self.last_files,
+                    'categories': {name: [path.name for path in self.category_files(name)] for name in ('hit', 'laugh', 'cheer', 'victory')},
+                    'available_cues': sorted({path.stem for path in self.directory.glob('*.wav')} | {'mole_hit', 'cheer', 'victory'})}

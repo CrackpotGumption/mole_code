@@ -314,3 +314,11 @@ Persisted: observed game-event logs (current 5 MiB file plus three rotated files
 No cancellation endpoint, arbitrary file reader, SSH-key reader, arbitrary shell executor, network reconfiguration endpoint, fleet discovery endpoint, or automatic game restoration is implemented. API self-description is an inventory, not a complete schema; use this reference and the OpenAPI file together. Future endpoint changes should update both artifacts against the handlers and serializers.
 
 Strip-wide command: `PLAYER_LIGHTS <r> <g> <b>` sets all six player pixels in one update (firmware 3.0.1). Idle uses this once per frame; gameplay keeps individual player colors.
+
+## Category audio assets
+
+Docker builds normalize copies from repository `fx/hit`, `fx/laugh`, `fx/cheer` (or `fx/cheers`), and `fx/victory` to mono 16-bit PCM WAV at 22050 Hz. Source files are preserved; WAV/MP3/OGG/FLAC inputs are supported. Playback picks random files for hit, cheer, and victory. Failure mixes 2–3 concurrent laughter lanes, interrupted by a hit clip before resuming laughter. Puzzle completion cheers on returning to idle; all-six completion plays a victory stinger. Startup still uses the game_start placeholder.
+
+GET `/audio` adds `categories` (category → filenames) and `last_files` (selected playback paths). POST `/audio` accepts `mole_hit`, `cheer`, `victory`, plus discovered legacy cue names. Testing cues requires maintenance. `last_cue` can be an internal asset path or mix identifier. Missing category assets fall back to existing placeholders. Local Python runs must point `FX_DIR` at normalized assets (generate with `python tools/prepare_audio.py fx /tmp/mole-fx` using ffmpeg); Docker handles conversion automatically.
+
+USB audio routing: `AUDIO_DEVICE=default` automatically prefers a single USB ALSA card, falling back to ALSA default only if none is detected. `AUDIO_DEVICE=usb` requires USB and disables playback with a diagnostic error if none is present. Multiple USB cards require explicit selection, e.g. `plughw:CARD=DeviceID,DEV=0`, discovered from `/audio.usb_cards`. `/audio.requested_device` shows configured routing; `/audio.device` shows selected routing. Settings changes apply on resume/recover.

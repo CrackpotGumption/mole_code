@@ -1,3 +1,10 @@
+FROM python:3.12-slim AS audio-build
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+COPY fx /build/fx
+COPY tools/prepare_audio.py /build/prepare_audio.py
+RUN python /build/prepare_audio.py /build/fx /build/audio
+
 FROM python:3.12-slim AS firmware-build
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
@@ -28,6 +35,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the Python package into the container.
 COPY python/app ./app
+COPY --from=audio-build /build/audio /app/app/fx
 COPY tools/prepare_app.py /app/prepare_app.py
 ARG APP_REVISION
 RUN APP_REVISION="$APP_REVISION" PYTHONPATH=/app python /app/prepare_app.py
