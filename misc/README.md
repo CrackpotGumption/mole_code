@@ -1,7 +1,7 @@
 # Linux cabinet installation
 
 Detailed instructions:
-- [Fresh Linux installation](FRESH_LINUX_SETUP.md)
+- [Fresh Linux installation, including an optional clean OS reset](FRESH_LINUX_SETUP.md)
 - [Migration from the previous instructions](UPGRADE_EXISTING_LINUX.md)
 
 These scripts support Ubuntu and Ubuntu-based Linux Mint. Initial provisioning
@@ -29,7 +29,7 @@ is preserved on reruns. Conflicting Docker installations require explicit
 removal before provisioning continues.
 
 The autostart installer writes a local launcher and `mole-cabinet.service`.
-It enables the service for future boots; it does not start it immediately.
+It enables the service for future boots and starts/restarts it immediately.
 The previous `run-plainraw.service`, if present, is disabled. No remote scripts
 are downloaded. The configuration must stay root-owned since it is sourced
 by a root service.

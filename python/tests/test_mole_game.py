@@ -105,7 +105,7 @@ class AccelGameTests(unittest.TestCase):
         self.assertEqual(self.game.state.completed_players, set(PLAYER_IDS))
         self.assertEqual(self.game.state.status, "GAME COMPLETE")
         self.game.complete_full_game()
-        self.assertEqual(self.hardware.commands.count("TICKET 8"), 1)
+        self.assertEqual(self.hardware.commands.count("TICKET 7"), 1)
 
     @patch("app.mole_game.time.sleep")
     def test_cooldown_even_after_release(self, sleep):

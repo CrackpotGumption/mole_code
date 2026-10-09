@@ -10,15 +10,33 @@ case ${ID:-} in
     *) echo 'Supported systems: Ubuntu and Ubuntu-based Linux Mint.' >&2; exit 1 ;;
 esac
 cabinet_user=${SUDO_USER:-}
-if [[ -n $cabinet_user && $cabinet_user != root ]]; then
-    id "$cabinet_user" >/dev/null
+if [[ $# -eq 2 && $1 == --admin-user ]]; then
+    cabinet_user=$2
+elif [[ $# -ne 0 ]]; then
+    echo 'Usage: sudo bash misc/linux_setup [--admin-user EXISTING_USER]' >&2
+    exit 1
 fi
+[[ -n $cabinet_user && $cabinet_user != root ]] || {
+    echo 'Run using sudo from your administrator account, or supply --admin-user EXISTING_USER.' >&2
+    exit 1
+}
+id "$cabinet_user" >/dev/null
+[[ $(id -u "$cabinet_user") -ne 0 ]] || { echo 'Administrator must be a non-root account.' >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
 dpkg --configure -a
 apt-get update
 apt-get -f install -y
 apt-get -o Dpkg::Options::=--force-confold upgrade -y
-apt-get install -y ca-certificates curl python3 usbutils unattended-upgrades util-linux coreutils
+apt-get install -y ca-certificates curl python3 usbutils unattended-upgrades util-linux coreutils git sudo openssh-server
+# Retain normal password-protected sudo; SSH uses the existing account's password/keys.
+usermod -aG sudo,dialout "$cabinet_user"
+install -d -m 0755 /run/sshd
+/usr/sbin/sshd -t
+# Open SSH before enabling it when the machine already has an active UFW firewall.
+if command -v ufw >/dev/null && LC_ALL=C ufw status | grep -q '^Status: active'; then
+    ufw allow OpenSSH
+fi
+systemctl enable --now ssh.service
 install -m 0755 -d /etc/apt/keyrings
 key_file=$(mktemp)
 trap 'rm -f "$key_file"' EXIT
@@ -61,9 +79,6 @@ cat > /etc/apt/apt.conf.d/20auto-upgrades <<'UPDATES'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 UPDATES
-if [[ -n $cabinet_user && $cabinet_user != root ]]; then
-    usermod -aG dialout "$cabinet_user"
-fi
 # Docker commands are run by root services; interactive docker-group access is unnecessary.
 install -d -m 0755 /etc/mole-cabinet /usr/local/lib/mole-cabinet
 if [[ ! -e /etc/mole-cabinet/cabinet.conf ]]; then
@@ -89,3 +104,5 @@ CONFIG
 fi
 systemctl is-active --quiet docker
 printf '\nProvisioning complete. Edit /etc/mole-cabinet/cabinet.conf, then run:\n  sudo bash misc/linux_bash_daemon\nReboot afterward. Configure BIOS power-on-after-AC-loss separately.\n'
+
+printf "SSH enabled for %s (use the existing account password or authorized SSH key). Sudo requires that account password.\n" "$cabinet_user"

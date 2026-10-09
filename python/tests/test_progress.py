@@ -58,14 +58,14 @@ class ProgressTests(unittest.TestCase):
         restored.restore_hardware()
         self.assertEqual(restored.state.status, 'GAME COMPLETE')
         self.assertTrue(restored.state.ticket_dispensed)
-        self.assertNotIn('TICKET 8', hardware.commands)
+        self.assertNotIn('TICKET 7', hardware.commands)
 
     def test_final_completion_saved_before_payout_intent(self):
         ProgressStore(self.path, PLAYER_IDS).save(set(PLAYER_IDS), False)
         hardware = Hardware()
         restored = MoleGame(hardware, state_path=self.path, victory_seconds=0)
         restored.restore_hardware()
-        self.assertEqual(hardware.commands.count('TICKET 8'), 1)
+        self.assertEqual(hardware.commands.count('TICKET 7'), 1)
         self.assertTrue(ProgressStore(self.path, PLAYER_IDS).load()[1])
 
     def test_failed_save_preserves_checkpoint_and_blocks_play(self):
@@ -97,8 +97,8 @@ class ProgressTests(unittest.TestCase):
         restored = MoleGame(hardware, state_path=self.path, victory_seconds=0)
         original_send = hardware.send
 
-        def send(command):
-            if command == 'TICKET 8':
+        def send(command, **kwargs):
+            if command == 'TICKET 7':
                 raise RuntimeError('power loss before command')
             original_send(command)
 
@@ -108,7 +108,7 @@ class ProgressTests(unittest.TestCase):
         next_hardware = Hardware()
         next_game = MoleGame(next_hardware, state_path=self.path, victory_seconds=0)
         next_game.restore_hardware()
-        self.assertNotIn('TICKET 8', next_hardware.commands)
+        self.assertNotIn('TICKET 7', next_hardware.commands)
 
     def test_new_game_with_no_checkpoint(self):
         self.assertEqual(self.game.state.completed_players, set())

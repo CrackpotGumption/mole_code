@@ -131,4 +131,5 @@ if systemctl cat run-plainraw.service >/dev/null 2>&1; then
 fi
 systemctl daemon-reload
 systemctl enable mole-cabinet.service
-printf 'Autostart installed. Start now with: sudo systemctl start mole-cabinet\nLogs: sudo journalctl -u mole-cabinet -f\n'
+systemctl restart mole-cabinet.service
+printf 'Autostart installed and game started. Status: sudo systemctl status mole-cabinet\nLogs: sudo journalctl -u mole-cabinet -f\n'

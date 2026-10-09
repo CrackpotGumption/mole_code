@@ -1,5 +1,9 @@
 # Migrate an existing Linux cabinet
 
+For machines in unknown states that you want fully reset, first use the clean
+reinstall step in [fresh setup](FRESH_LINUX_SETUP.md). This migration preserves
+the existing operating system and is not a factory reset.
+
 Use this when Docker and the cabinet were installed using the previous
 instructions. Initial migration needs internet access to obtain the new image;
 subsequent boots can use its local copy offline. Perform migration between games,
@@ -41,7 +45,7 @@ For machines provisioned by the previous large Mint bootstrap, run:
 sudo bash misc/linux_setup
 ```
 
-The updated script accepts sudo, preserves existing cabinet.conf, and does not
+The updated script enables SSH and sudo for the invoking administrator, preserves existing cabinet.conf, and does not
 start another game. It updates the OS, so use a maintenance window. If you
 already have a working Docker installation that the script flags as conflicting,
 keep it for this migration rather than removing it blindly. Ensure the launcher
@@ -167,3 +171,5 @@ container with `sudo docker logs --tail 100 mole-game-legacy`. Keep the old remo
 bootstrap disabled so it cannot unexpectedly replace the recovery container.
 For a later retry, stop the legacy container and disable its restart policy
 again before enabling and starting `mole-cabinet`.
+
+Remote administration uses `ssh YOUR_USER@CABINET_LAN_IP`, then password-protected sudo. Run `linux_setup` from that normal account with sudo (or pass `--admin-user EXISTING_USER` when running as root). The daemon installer now starts/restarts the game immediately; perform migration while the cabinet is idle. See [fresh setup](FRESH_LINUX_SETUP.md) for SSH verification.

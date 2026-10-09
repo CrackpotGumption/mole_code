@@ -1222,7 +1222,7 @@ class MoleGame:
 
     def run_victory_show(self):
         self._run_show(self.victory_seconds, victory=True,
-                       on_start=lambda: self.arduino.send("TICKET 8"))
+                       on_start=lambda: self.arduino.send("TICKET 7"))
 
     def _run_show(self, seconds, victory=False, on_start=None):
         self.state.status = "VICTORY CELEBRATION" if victory else "LAUGH AT YOU"
@@ -1559,16 +1559,16 @@ class MoleGame:
     def _handle_ticket_event(self, line):
         parts = line.split()
         try:
-            if len(parts) == 2 and parts[0] == "TICKET_START" and int(parts[1]) == 8:
+            if len(parts) == 2 and parts[0] == "TICKET_START" and int(parts[1]) == 7:
                 self.state.ticket_status = "DISPENSING"
             elif len(parts) == 2 and parts[0] in ("TICKET_COUNT", "TICKET_DONE"):
                 count = int(parts[1])
-                if not 0 <= count <= 8:
+                if not 0 <= count <= 7:
                     return
                 self.state.tickets_dispensed = count
-                self.state.ticket_status = ("DONE" if count == 8 else "ERROR") if parts[0] == "TICKET_DONE" else "DISPENSING"
+                self.state.ticket_status = ("DONE" if count == 7 else "ERROR") if parts[0] == "TICKET_DONE" else "DISPENSING"
             elif len(parts) == 3 and parts[:2] == ["TICKET_ERROR", "TIMEOUT"]:
-                self.state.tickets_dispensed = max(0, min(8, int(parts[2])))
+                self.state.tickets_dispensed = max(0, min(7, int(parts[2])))
                 self.state.ticket_status = "ERROR"
         except ValueError:
             return

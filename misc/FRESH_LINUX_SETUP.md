@@ -1,115 +1,140 @@
 # Fresh Linux cabinet
 
-Use Ubuntu or Ubuntu-based Linux Mint on an AMD64 or ARM64 machine. Initial
-setup needs internet access. The installed game can subsequently run offline.
-Use the current scripts from this checkout; they have not necessarily been
-committed or published with the repository yet.
+Use Ubuntu or Ubuntu-based Linux Mint on AMD64 or ARM64. Initial provisioning
+requires internet. After an image is cached, the game and LAN status API work offline.
 
-## 1. Prepare the machine
+## Optional: reset an existing machine to a clean Mint installation
 
-Install Linux, create a normal administrator user, and connect to the network.
-Connect the Arduino by USB. Configure BIOS/UEFI to power on after AC power
-returns. Choose a DHCP reservation or static LAN IP if other machines need a
-stable status URL. The Linux scripts do not configure BIOS or networking.
+For machines with unknown packages, services and configuration, use a clean OS
+reinstall before running these scripts. `linux_setup` provisions the existing OS;
+it does not restore factory settings or remove arbitrary previous customizations.
 
-Copy `linux_setup` and `linux_bash_daemon` from this repository's `misc` folder
-into a `misc` folder on the cabinet. Open a terminal in the folder containing
-`misc` and run:
+1. Back up anything you want to retain to another machine or external drive.
+   This includes personal files, SSH keys, cabinet configuration and Docker
+   player-progress data if that progress needs to survive. An erased installation
+   loses its cached images and progress; record the cabinet's network settings too.
+2. Prepare a bootable USB installer for Ubuntu-based Linux Mint.
+3. At the cabinet, boot from that USB and start the Mint installer.
+4. For a dedicated cabinet whose OS disk can be completely erased, select the
+   installer's erase-disk installation option. Verify the target disk carefully;
+   disconnect other storage containing data you want to keep. If another OS or
+   partition must remain, use a partition-preserving installation instead.
+5. Create a normal administrator account with a password, finish installation,
+   remove the installer USB when prompted, and boot into the new installation.
+6. Connect to the network and follow the two-script setup below. Test SSH and sudo
+   from your administration computer before leaving the cabinet.
+
+This is an OS reinstall, not a manufacturer factory-image restoration. It replaces
+old Linux services, packages and configuration on the erased disk. It does not
+reset BIOS/UEFI settings or Arduino firmware. SSH host keys will change: when your
+administration computer reports a changed host key, verify that it is the machine
+you just reinstalled before replacing its saved SSH fingerprint.
+
+Disk erasure is performed locally through the installer, not by either cabinet
+script or through an SSH session. If you want to keep the installed Linux OS, use
+[the migration instructions](UPGRADE_EXISTING_LINUX.md) instead; migration is not
+a complete system reset.
+
+## Install Linux, clone, run two scripts
+
+During Linux installation, create a normal administrator account with a password
+and connect the machine to your cabinet LAN. Connect the Arduino with the current
+`MOLE_FINAL_NO_INTERVAL_v2` firmware already flashed. The setup scripts do not flash it.
+Configure BIOS/UEFI to power on after AC power returns.
+
+Run these commands from that administrator account:
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y git
+git clone https://github.com/CrackpotGumption/mole_code.git
+cd mole_code
 sudo bash misc/linux_setup
-```
-
-This updates the OS, installs Docker and tools, enables Docker at boot,
-disables sleep, and creates the root-owned cabinet configuration. If the script
-reports conflicting Docker packages, stop and resolve that existing installation
-before retrying; it deliberately does not remove other workloads automatically.
-
-## 2. Configure the Arduino and image
-
-Find the stable Arduino path:
-
-```bash
-ls -l /dev/serial/by-id/
-sudo nano /etc/mole-cabinet/cabinet.conf
-```
-
-Use these settings, replacing the serial path with the complete path printed
-above (not the symlink target):
-
-```bash
-IMAGE='myst1cus/mole-game:latest'
-CONTAINER_NAME='mole-game'
-SERIAL_DEVICE='/dev/serial/by-id/REPLACE_WITH_YOUR_ARDUINO'
-STATUS_BIND='0.0.0.0'
-STATUS_PORT=8080
-FAILURE_SECONDS=15
-VICTORY_SECONDS=45
-AUDIO_ENABLED=1
-AUDIO_DEVICE='default'
-```
-
-If `SERIAL_DEVICE` is empty, the launcher selects a USB serial device only when
-exactly one is present. A stable explicit path is preferred for cabinet use.
-The Arduino needs this project's compatible firmware; these scripts do not
-flash it. The image supports raw `ACCEL` packets and legacy `HIT` packets.
-
-Pull the game before starting to check registry access and seed the offline cache:
-
-```bash
-sudo docker pull myst1cus/mole-game:latest
-```
-
-If the Hub repository is private, first run `sudo docker login --username myst1cus`
-(or use a read-only deployment account with access). The boot service runs as
-root and uses root's Docker credentials. Do not put credentials in cabinet.conf.
-
-## 3. Install and start autostart
-
-```bash
 sudo bash misc/linux_bash_daemon
-sudo systemctl start mole-cabinet
-sudo systemctl status mole-cabinet --no-pager
+```
+
+The first script updates Linux, installs Docker, OpenSSH and supporting tools,
+enables SSH and Docker at boot, grants the invoking account sudo access, disables
+sleep, and creates `/etc/mole-cabinet/cabinet.conf` if it does not exist. Existing
+configuration is preserved. If running directly as root, explicitly select an
+existing normal account with `bash misc/linux_setup --admin-user YOUR_USER`.
+
+The second script installs and immediately starts the boot service. Defaults use
+`myst1cus/mole-game:latest`, automatically select the only connected USB serial
+device, publish status on port 8080, and store progress in `mole-game-data`.
+No configuration editing is needed for a cabinet with one Arduino and a public
+Docker image. If the Docker repository is private, run `sudo docker login` before
+the second script. The current application must be built and published to Docker
+Hub for cabinets to receive these changes; cloning Python files does not update
+the downloaded image.
+
+The launcher attempts to pull the newest image, falls back to the cached version
+when offline, and restores the previous container if a replacement fails startup.
+A first installation needs a published image and internet, or a preloaded image.
+If Docker packages conflict, the first script reports them rather than removing
+existing workloads. Resolve the reported packages before retrying.
+
+## Verify and reboot
+
+```bash
+sudo systemctl status ssh mole-cabinet --no-pager
 sudo docker ps --filter name=mole-game
 curl --fail http://localhost:8080/health
 curl --fail http://localhost:8080/state
+hostname -I
+sudo reboot
 ```
 
-The service waits for USB, attempts to pull the newest image, then starts the
-container. A failed pull uses the locally stored version. Updates that fail
-startup restore the previous container, when present, and retry later.
-A service error can be diagnosed with:
+After reboot, verify the status endpoint and test physical badge reads, hits,
+movement, lights, audio and payout. The current payout is seven tickets, with a
+two-second-per-ticket firmware timeout (14 seconds total). Upload the updated
+Arduino sketch to apply that timeout.
+
+## Remote administration
+
+Use the administrator username created during installation and the cabinet LAN IP:
 
 ```bash
+ssh YOUR_USER@CABINET_LAN_IP
+sudo systemctl status mole-cabinet --no-pager
 sudo journalctl -u mole-cabinet -n 100 --no-pager
 sudo docker logs --tail 100 mole-game
 ```
 
-Reboot after successful setup:
+SSH uses the existing account password or installed SSH keys; sudo asks for that
+account's password. The script does not enable root SSH or passwordless sudo and
+preserves existing SSH authentication settings. For a machine configured for
+key-only SSH, install your public key in that account's `~/.ssh/authorized_keys`.
+From a Linux/macOS administration machine with `ssh-copy-id`, you can install it
+with `ssh-copy-id YOUR_USER@CABINET_LAN_IP` while password SSH is available.
+Test remote login and `sudo -v` before leaving the cabinet.
+
+An already-active UFW firewall receives an OpenSSH allow rule. Other firewalls or
+network ACLs must permit SSH (normally TCP 22). Use a DHCP reservation for a stable
+LAN IP; these scripts do not configure network addresses or off-site access.
+
+To update the setup scripts later:
 
 ```bash
-sudo reboot
+cd mole_code
+git pull
+sudo bash misc/linux_setup
+sudo bash misc/linux_bash_daemon
 ```
 
-Verify that the game and status endpoints return after reboot. Then verify
-physical badge reads, hits, mole movement, lights, and ticket payout on the
-cabinet. Software startup checks cannot confirm mechanical operation.
+The second script restarts the launcher and checks for the newest Docker image.
+Run updates when no players are using the cabinet.
 
-## LAN and offline use
+## LAN status and offline recovery
 
-On another computer on the same LAN, open
-`http://CABINET_LAN_IP:8080/state`. On the cabinet use
-`http://localhost:8080/state`. `/health` is also available. These endpoints
-return JSON, not an HTML dashboard. Internet access is unnecessary for them.
+Open `http://CABINET_LAN_IP:8080/state` from the LAN, or
+`http://localhost:8080/state` on the cabinet. `/health` is also available.
+These endpoints return JSON. Existing firewall rules may need TCP 8080 allowed;
+Docker-published ports have their own firewall behavior. Keep SSH and the
+unauthenticated status API on the trusted cabinet network.
 
-Existing firewall rules may need to allow TCP 8080 on your trusted cabinet LAN.
-Docker port publication has its own firewall behavior; do not assume UFW alone
-restricts it. Do not expose this unauthenticated API to the public internet.
-
-Test a reboot with internet disconnected while retaining the local network.
-Allow up to about a minute for the bounded image-pull attempt plus startup.
-Keep the cached image: don't run image-pruning commands that remove it.
-Completed players survive container restarts and reboots in the `mole-game-data`
-volume. An unfinished player rescans their badge and restarts their puzzle.
-Do not delete that volume. A completed full game remains completed until its
-checkpoint is deliberately cleared for a new group.
+Test rebooting without internet while retaining the LAN. Allow about a minute
+for the bounded image-pull attempt plus startup. Keep the cached Docker image
+and the `mole-game-data` volume. Completed players survive reboot; an unfinished
+player rescans their badge and restarts their puzzle. A completed full game stays
+completed until its checkpoint is deliberately cleared for a new group.

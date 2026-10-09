@@ -31,9 +31,9 @@ class VictoryTests(unittest.TestCase):
         def send(command, **kwargs):
             original(command)
             timing.append((clock.now, command))
-            if command == 'TICKET 8':
-                captured.extend([('TICKET_START 8', clock.now),
-                                 ('TICKET_COUNT 8', clock.now), ('TICKET_DONE 8', clock.now)])
+            if command == 'TICKET 7':
+                captured.extend([('TICKET_START 7', clock.now),
+                                 ('TICKET_COUNT 7', clock.now), ('TICKET_DONE 7', clock.now)])
             if command == 'MOLE 0 UP':
                 captured.extend([('ACCEL 0 0 0 0 -12000', clock.now + 0.01),
                                  ('ACCEL 0 0 0 0 -13000', clock.now + 0.015)])
@@ -61,18 +61,18 @@ class VictoryTests(unittest.TestCase):
         self.assertEqual(self.game.state.completed_players, set(PLAYER_IDS))
         self.assertEqual(self.game.state.status, 'GAME COMPLETE')
         self.assertEqual(self.game.state.ticket_status, 'DONE')
-        self.assertEqual(self.game.state.tickets_dispensed, 8)
+        self.assertEqual(self.game.state.tickets_dispensed, 7)
         for player in range(6):
             rgb = [command for command in self.hardware.commands
                    if command.startswith(f'PLAYER_LIGHT {player} ') and len(command.split()) == 5]
             self.assertGreater(len(set(rgb)), 2)
             self.assertIn(f'PLAYER_LIGHT {player} GREEN', self.hardware.commands[-6:])
         self.game.complete_full_game()
-        self.assertEqual(self.hardware.commands.count('TICKET 8'), 1)
+        self.assertEqual(self.hardware.commands.count('TICKET 7'), 1)
         self.audio.play_victory.assert_called_once()
 
     def test_ticket_timeout_and_configuration(self):
-        self.game.handle_arduino_event('TICKET_START 8')
+        self.game.handle_arduino_event('TICKET_START 7')
         self.game.handle_arduino_event('TICKET_COUNT 3')
         self.game.handle_arduino_event('TICKET_ERROR TIMEOUT 3')
         self.assertEqual(self.game.state.ticket_status, 'ERROR')

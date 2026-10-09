@@ -1,5 +1,6 @@
 """Compile the actual ticket state machine against a small host hardware stub."""
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -16,6 +17,9 @@ class TicketPayoutTests(unittest.TestCase):
         source = (Path(__file__).resolve().parents[1] / folder / f'{folder}.ino').read_text()
         block = source[source.index('// Nonblocking ticket payout:'):source.index(
             '// STATUS', source.index('// Nonblocking ticket payout:'))]
+        timeout = re.search(r'const unsigned long TICKET_TIMEOUT_PER_TICKET = \d+;', source).group()
+        if version == 'v2':
+            self.assertIn('= 2000;', timeout)
         harness = r'''
 #include <cassert>
 #include <sstream>
@@ -37,6 +41,7 @@ struct Logger {
   template<class T> void println(T value) { buffer << value << "\n"; }
 } Serial;
 '''
+        harness = harness.replace('const unsigned long TICKET_TIMEOUT_PER_TICKET = 5000;', timeout)
         tests = r'''
 int main() {
   assert(dispenseTickets(2));
@@ -55,9 +60,14 @@ int main() {
   assert(Serial.buffer.str().find("TICKET_DONE 2") != std::string::npos);
   sensorState = HIGH;
   assert(dispenseTickets(1));
-  clockMs += 5001; updateTickets();
+  clockMs += TICKET_TIMEOUT_PER_TICKET + 1; updateTickets();
   assert(!motorOn && !ticketPayoutActive);
   assert(Serial.buffer.str().find("TICKET_ERROR TIMEOUT 0") != std::string::npos);
+  assert(dispenseTickets(7));
+  clockMs += TICKET_TIMEOUT_PER_TICKET * 7; updateTickets();
+  assert(motorOn);
+  clockMs++; updateTickets();
+  assert(!motorOn && !ticketPayoutActive);
 }
 '''
         with tempfile.TemporaryDirectory() as folder:

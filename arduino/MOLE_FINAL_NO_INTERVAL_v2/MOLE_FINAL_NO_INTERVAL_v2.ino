@@ -369,7 +369,7 @@ const uint8_t TICKET_SENSOR_ACTIVE = LOW;
 
 
 
-const unsigned long TICKET_TIMEOUT_PER_TICKET = 5000;
+const unsigned long TICKET_TIMEOUT_PER_TICKET = 2000;
 
 
 
