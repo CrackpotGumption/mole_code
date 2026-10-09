@@ -164,6 +164,13 @@ class Cabinet:
             raise RuntimeError(f'Required hardware not ready: {report}')
         self.arduino.submit_command('LEASE ON', origin='health', quiet=True)
         self.arduino.wait_until_idle()
+        # LEASE ON's ACK does not update the cached HEALTH report. Refresh it
+        # before publishing READY, or tick() can fault on the pre-lease snapshot.
+        self.arduino.submit_command('HEALTH', origin='health', quiet=True)
+        self.arduino.wait_until_idle()
+        report = self.arduino.get_diagnostics()['hardware_health']
+        if not report or not report['mcp_ready'] or report['sensor_mask'] != 31 or not report['lease_enabled']:
+            raise RuntimeError(f'Hardware or controller lease not ready: {report}')
         self.fault = None
         self._new_game(admin_state=admin_state)
         self.phase = 'MAINTENANCE' if self.maintenance else 'READY'

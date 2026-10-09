@@ -153,3 +153,24 @@ class CabinetTests(unittest.TestCase):
         self.cabinet._act('maintenance', {})
         fresh = Cabinet(Mock(), '/dev/test', self.stopped)
         self.assertFalse(fresh.maintenance)
+
+    def test_ready_uses_health_snapshot_taken_after_lease_enabled(self):
+        class SnapshotController(Controller):
+            reported_lease = False
+            def submit_command(self, command, **kwargs):
+                result = super().submit_command(command, **kwargs)
+                if command == 'HEALTH':
+                    self.reported_lease = self.lease
+                return result
+            def get_diagnostics(self):
+                report = super().get_diagnostics()
+                report['hardware_health']['lease_enabled'] = self.reported_lease
+                return report
+        self.controller = SnapshotController()
+        self.connect()
+        self.cabinet.tick()
+        self.assertTrue(self.cabinet.health()['ready'])
+        self.assertIsNone(self.cabinet.fault)
+        commands = [r['command'] for r in self.controller.records]
+        lease_index = commands.index('LEASE ON')
+        self.assertEqual(commands[lease_index + 1], 'HEALTH')
