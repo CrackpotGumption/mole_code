@@ -157,3 +157,56 @@ class SensorCaptureTests(unittest.TestCase):
                 Controller(ready_timeout=0.01)
         port.close.assert_called_once()
         port.write.assert_not_called()
+
+    def test_firmware_mismatch_closes_before_game_workers_start(self):
+        from app.firmware import FirmwareMismatch
+        serial_module = ArduinoController.__init__.__globals__['serial']
+        started = []
+
+        class Controller(ArduinoController):
+            def _reader_loop(self):
+                self.firmware_identity = 'FIRMWARE old 1.0 oldhash'
+                self._ready_event.set()
+
+            def _writer_loop(self):
+                started.append('writer')
+
+            def _event_loop(self):
+                started.append('events')
+
+        port = Mock()
+        with patch.object(serial_module, 'Serial', return_value=port, create=True):
+            with self.assertRaises(FirmwareMismatch):
+                Controller(ready_timeout=0.2, expected_firmware='FIRMWARE new 2.1 newhash')
+        port.close.assert_called_once()
+        port.write.assert_not_called()
+        self.assertEqual(started, [])
+
+    def test_serial_diagnostics_capture_hardware_reports_and_errors(self):
+        serial_module = ArduinoController.__init__.__globals__['serial']
+
+        class Controller(ArduinoController):
+            def _reader_loop(self):
+                for line in ('SENSOR OK 0 CHANNEL 0', 'SENSOR MISSING 2 CHANNEL 2',
+                             'RFID_DIAG ERROR READER_NOT_RESPONDING', 'I2C_TIMEOUT',
+                             'ERROR BAD MOLE'):
+                    self._record_serial(line)
+                self._ready_event.set()
+
+            def _writer_loop(self):
+                pass
+
+            def _event_loop(self):
+                pass
+
+        port = Mock(port='/dev/mega', baudrate=115200)
+        with patch.object(serial_module, 'Serial', return_value=port, create=True):
+            controller = Controller(ready_timeout=0.2)
+            report = controller.get_diagnostics()
+            controller.close()
+        self.assertEqual(report['sensors']['0']['startup_status'], 'OK')
+        self.assertEqual(report['sensors']['2']['startup_status'], 'MISSING')
+        self.assertEqual(report['rfid_status_at_last_report'], 'NOT_RESPONDING')
+        self.assertEqual(report['i2c_timeout_count'], 1)
+        self.assertEqual(report['last_ack'], 'ERROR BAD MOLE')
+        self.assertEqual(len(report['recent_errors']), 4)

@@ -1,3 +1,15 @@
+> Current policy (application 3.2.0): no API tokens, no automatic game or payout
+> restoration. Every restart starts fresh. Observational game-state logs persist;
+> admins can explicitly supply a restore state through POST /game/restore or the
+> /serial game relay, then apply it with /resume. See [API guide](../misc/API.md).
+> Legacy checkpoint/recovery instructions below no longer apply.
+
+> Application/firmware 3.0.0 uses an API-first controller. See
+> [cabinet API guide](../misc/API.md) for current controls and recovery.
+> The API stays available during hardware faults and flashing; it no longer exits
+> immediately on serial failure. Historical serial troubleshooting notes below
+> describe earlier controller versions.
+
 # Puzzle controller
 
 Run from this directory with `python -m app.app` after installing
@@ -25,7 +37,7 @@ Run hardware-free checks with:
 
 ## Container runtime
 
-Build from the repository root with `docker build -t mole-game:latest ./python`.
+Build from the repository root with `docker build -f python/Dockerfile -t mole-game:latest .`.
 The running container is named `mole-game`. Its future Docker Hub repository
 is `myst1cus/mole-game`. Publish the image before the first online deployment.
 See `docker_cheatsheet.txt` for manual commands or use the cabinet boot installer.
@@ -286,3 +298,98 @@ that reset/power-cycle and boot diagnostics are needed. An intentionally closed
 serial port no longer produces a misleading reader error during shutdown.
 Persistent I2C timeouts during piston movement still require investigating the
 shared bus/power/wiring; serial reconnection cannot power-cycle external sensors.
+
+### Serial commands over HTTP
+
+POST a JSON command to `/serial` to use the running controller's ordered serial
+queue. For example, from an administration computer on the cabinet LAN:
+
+```bash
+curl -i http://mole4.local:8080/serial \
+  -H 'Content-Type: application/json' \
+  --data '{"command":"RFID STATUS"}'
+```
+
+A successful request returns HTTP 202 with
+`{"status":"queued","command":"RFID STATUS"}`. This confirms queuing, not
+an Arduino acknowledgement or successful execution. View replies with
+`sudo docker logs --tail 100 -f mole-game` over SSH. Firmware errors also appear
+there. A disconnected controller returns 503; invalid JSON/commands return 400.
+Commands must be a single printable ASCII line of at most 128 characters;
+request bodies are limited to 1024 bytes.
+
+This endpoint sends raw firmware commands for cabinet administration. It does
+not update Python's puzzle state or payout checkpoint; use manual movement and
+payout commands between games. The endpoint shares the status service's LAN
+exposure and currently has no authentication. Browser cross-origin access is
+not enabled. Cabinets need an updated Docker image to receive this endpoint;
+updating the repository checkout alone does not update the running container.
+
+### Firmware identity and automatic Mega updates
+
+The main sketch prints `FIRMWARE <sketch-name> <version> <source-sha256>` during
+startup, before `READY`. Python logs its expected identity and validates the
+banner before starting command/event workers or the game. A legacy sketch that
+prints `READY` but has no identity also counts as a mismatch. A board that never
+prints `READY` stops startup for diagnosis rather than triggering a blind upload.
+
+The Docker build compiles `arduino/MOLE_FINAL_NO_INTERVAL_v2` for
+`arduino:avr:mega`, bundles its HEX and identity manifest, and includes avrdude.
+A mismatch closes the serial connection, uploads the bundled firmware using the
+Mega bootloader, then reconnects and verifies the new banner. Flashing and game
+startup stop on upload/verification failure; there is one upload attempt per
+controller startup. Normal container restart policies still retry failed
+startups. Matching firmware is not rewritten. Flashing works offline with the
+cached image, and requires the Mega's working USB bootloader. avrdude checks the
+ATmega2560 device signature and verifies writes.
+
+The reference on cabinets is the repository sketch **packaged into their Docker
+image**, not a live GitHub lookup or arbitrary host checkout. Publish a rebuilt
+image after sketch changes to synchronize cabinets. Builds now use the whole
+repository as context:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -f python/Dockerfile -t myst1cus/mole-game:latest --push .
+```
+
+`tools/prepare_firmware.py` owns the sketch version and generates the identity
+header/hash automatically during Docker builds. For manual Arduino IDE uploads,
+regenerate the header after changing the sketch:
+
+```bash
+python3 tools/prepare_firmware.py arduino/MOLE_FINAL_NO_INTERVAL_v2 /tmp/mole-firmware
+cp /tmp/mole-firmware/MOLE_FINAL_NO_INTERVAL_v2/firmware_identity.h \
+  arduino/MOLE_FINAL_NO_INTERVAL_v2/firmware_identity.h
+```
+
+Running Python directly from the repository compares against its current sketch.
+If an update is needed, install Arduino CLI with the AVR core and libraries used
+in `python/Dockerfile`; it compiles and uploads that checkout. Docker cabinets
+need no host compiler. Set `FIRMWARE_AUTO_FLASH=0` in the controller environment
+to reject mismatches without uploading. Updating firmware resets the Arduino;
+perform application updates between games. Completed-player data remains in the
+persistent Docker volume.
+
+### Cabinet diagnostics and solve state
+
+`GET /diagnostics` reports application version (`3.0.0`), exact source hash, build
+time/revision (when supplied), Python/pyserial, container platform, firmware
+identities, serial queue/thread state, last received ACK, recent errors and I2C
+counts, sensor/RFID reports, checkpoint/storage information, audio configuration
+and the current game. `/state` now includes `solve_state`, with per-player
+SOLVED/ACTIVE/PENDING states, next expected mole, step counts and separate ticket
+request/payout confirmation. These are read-only observations; no commands or
+hardware probes are sent by a diagnostics request.
+
+The updated daemon installer also installs `misc/collect_host_info.py` from this
+checkout and mounts a read-only host snapshot into the container. Rerun
+`sudo bash misc/linux_bash_daemon` after updating the checkout to enable this.
+Without the mount, diagnostics reports `host: null`. Host information is captured
+at launch; container OS information is reported separately from Mint host OS.
+Do not copy only the two shell scripts; retain the collector beside them.
+Supply `--build-arg APP_REVISION=YOUR_GIT_COMMIT` when building to record the commit;
+the source hash identifies actual application contents even with uncommitted edits.
+No credentials or complete environment variables are included.
+
+See `misc/ERROR_HANDLING_REVIEW.md` for current limitations and recovery additions.

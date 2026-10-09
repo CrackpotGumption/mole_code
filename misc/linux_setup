@@ -27,7 +27,9 @@ dpkg --configure -a
 apt-get update
 apt-get -f install -y
 apt-get -o Dpkg::Options::=--force-confold upgrade -y
-apt-get install -y ca-certificates curl python3 usbutils unattended-upgrades util-linux coreutils git sudo openssh-server
+apt-get install -y ca-certificates curl python3 usbutils pciutils procps iproute2 unattended-upgrades util-linux coreutils git sudo openssh-server avahi-daemon libnss-mdns
+# Advertise this machine's hostname on the LAN as HOSTNAME.local (mDNS).
+systemctl enable --now avahi-daemon.service
 # Retain normal password-protected sudo; SSH uses the existing account's password/keys.
 usermod -aG sudo,dialout "$cabinet_user"
 install -d -m 0755 /run/sshd

@@ -1,13 +1,14 @@
 # Linux cabinet installation
 
 Detailed instructions:
+- [API administration and recovery](API.md)
 - [Fresh Linux installation, including an optional clean OS reset](FRESH_LINUX_SETUP.md)
 - [Migration from the previous instructions](UPGRADE_EXISTING_LINUX.md)
 
 These scripts support Ubuntu and Ubuntu-based Linux Mint. Initial provisioning
 requires internet access. Booting an already installed cabinet does not.
 
-1. Copy both scripts onto the cabinet and run:
+1. Keep the complete `misc` folder on the cabinet, including the host collector and agent, and run:
    `sudo bash misc/linux_setup`
 2. Edit `/etc/mole-cabinet/cabinet.conf`:
    - `IMAGE` defaults to `myst1cus/mole-game:latest`; publish it before deployment.

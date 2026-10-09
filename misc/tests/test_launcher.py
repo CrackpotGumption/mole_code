@@ -8,6 +8,10 @@ import unittest
 
 SOURCE = Path(__file__).resolve().parents[1] / 'linux_bash_daemon'
 LAUNCHER = SOURCE.read_text().split("<<'LAUNCHER'\n", 1)[1].split('\nLAUNCHER\n', 1)[0]
+# Fixtures are owned by the host test user rather than Linux root.
+a = LAUNCHER.index('cabinet_config_mode=')
+b = LAUNCHER.index('source /etc/mole-cabinet/cabinet.conf', a)
+LAUNCHER = LAUNCHER[:a] + LAUNCHER[b:]
 
 DOCKER = '''#!/usr/bin/env python3
 import json, os, sys
@@ -27,15 +31,15 @@ elif a[:2] == ['container', 'inspect']:
  code = int(a[2] not in s['containers'])
 elif a[0] == 'inspect':
  code = int(a[-1] not in s['containers'])
- out = 'true' if 'Running' in a[2] else 'sha256:cached'
+ out = ('false' if s['containers'].get(a[-1]) == 'failed' else 'true') if 'Running' in a[2] else 'sha256:cached'
 elif a[0] == 'rename':
  s['containers'][a[2]] = s['containers'].pop(a[1])
 elif a[0] == 'run':
  name = a[a.index('--name') + 1]
- s['containers'][name] = 'new'
+ s['containers'][name] = 'failed' if s.get('run_fails', False) else 'new'
  code = int(s.get('run_fails', False))
 elif a[0] == 'exec':
- code = int(s.get('unhealthy', False))
+ code = int(s.get('unhealthy', False) or s['containers'].get(a[1]) == 'failed' or (s.get('degraded', False) and '/health' in a[-1]))
 elif a[0] == 'rm':
  s['containers'].pop(a[-1], None)
 p.write_text(json.dumps(s))
@@ -62,7 +66,8 @@ class LauncherTests(unittest.TestCase):
                 file.chmod(0o755)
             runner = root / 'launch'
             runner.write_text(LAUNCHER.replace('/etc/mole-cabinet/cabinet.conf', str(config))
-                              .replace('/run/mole-cabinet.lock', str(root / 'lock')))
+                              .replace('/run/mole-cabinet.lock', str(root / 'lock'))
+                              .replace('python3 /usr/local/lib/mole-cabinet/collect-host-info', 'true'))
             env = dict(os.environ, PATH=f"{root}:{os.environ['PATH']}", MOCK_STATE=str(path))
             result = subprocess.run(['bash', str(runner)], env=env, capture_output=True, text=True)
             return result, json.loads(path.read_text())
@@ -76,7 +81,7 @@ class LauncherTests(unittest.TestCase):
         self.assertIn('/dev/null:/dev/cabinet-arduino', run)
         self.assertIn('max-size=10m', run)
         self.assertIn('type=volume,source=mole-game-data,target=/data', run)
-        self.assertIn('GAME_STATE_PATH=/data/progress.json', run)
+        self.assertIn('GAME_LOG_PATH=/data/game-events.jsonl', run)
 
     def test_offline_uses_cached_image(self):
         result, state = self.run_launcher(offline=True)
@@ -126,18 +131,18 @@ class SerialDiscoveryTests(unittest.TestCase):
 
     def test_missing_device_has_exact_message(self):
         result = self.discover()
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stderr.strip(), 'NO SERIAL DEVICE FOUND')
 
     def test_invalid_configured_device(self):
         result = self.discover(configured='/not/a/serial/device')
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.returncode, 0)
         self.assertIn('NO SERIAL DEVICE FOUND', result.stderr)
         self.assertIn('Configured SERIAL_DEVICE is unavailable', result.stderr)
 
     def test_multiple_devices_listed(self):
         result = self.discover(count=2)
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.returncode, 0)
         self.assertIn('MULTIPLE SERIAL DEVICES FOUND', result.stderr)
         self.assertIn('ttyUSB0', result.stderr)
         self.assertIn('ttyUSB1', result.stderr)
@@ -145,3 +150,12 @@ class SerialDiscoveryTests(unittest.TestCase):
     def test_single_device_selected(self):
         result = self.discover(count=1)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class DegradedLauncherTests(unittest.TestCase):
+    run_launcher = LauncherTests.run_launcher
+    def test_api_fault_is_retained_for_remote_recovery(self):
+        result, state = self.run_launcher(degraded=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state['containers'], {'mole-game': 'new', 'mole-game-previous': 'old'})
+        self.assertIn('degraded state', result.stderr)

@@ -1,24 +1,45 @@
+FROM python:3.12-slim AS firmware-build
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN case "$TARGETARCH" in amd64) cli_arch=64bit ;; arm64) cli_arch=ARM64 ;; *) exit 1 ;; esac; \
+    curl -fsSL --retry 3 "https://downloads.arduino.cc/arduino-cli/arduino-cli_1.2.2_Linux_${cli_arch}.tar.gz" \
+    | tar -xz -C /usr/local/bin arduino-cli
+RUN arduino-cli core update-index \
+    && arduino-cli core install arduino:avr@1.8.6 \
+    && arduino-cli lib install "Adafruit BusIO@1.17.4" "Adafruit NeoPixel@1.12.3" "Adafruit MCP23017 Arduino Library@2.3.2" "MFRC522@1.4.12"
+COPY tools/prepare_firmware.py /build/prepare_firmware.py
+COPY arduino/MOLE_FINAL_NO_INTERVAL_v2 /build/source
+RUN python /build/prepare_firmware.py /build/source /build/firmware \
+    && arduino-cli compile --fqbn arduino:avr:mega --output-dir /build/firmware \
+       /build/firmware/MOLE_FINAL_NO_INTERVAL_v2
+
 FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends alsa-utils \
+RUN apt-get update && apt-get install -y --no-install-recommends alsa-utils avrdude \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies first so Docker can cache them.
-COPY requirements.txt .
+COPY python/requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the Python package into the container.
-COPY app ./app
+COPY python/app ./app
+COPY tools/prepare_app.py /app/prepare_app.py
+ARG APP_REVISION
+RUN APP_REVISION="$APP_REVISION" PYTHONPATH=/app python /app/prepare_app.py
+COPY --from=firmware-build /build/firmware/manifest.json /opt/mole-firmware/manifest.json
+COPY --from=firmware-build /build/firmware/MOLE_FINAL_NO_INTERVAL_v2.ino.hex /opt/mole-firmware/MOLE_FINAL_NO_INTERVAL_v2.ino.hex
 
 # Your status HTTP service runs on 8080.
 EXPOSE 8080
 
 # Don't buffer stdout/stderr so Arduino/game logs appear immediately.
 ENV PYTHONUNBUFFERED=1
-ENV GAME_STATE_PATH=/data/progress.json
+ENV GAME_LOG_PATH=/data/game-events.jsonl
 ENV FAILURE_SECONDS=15
 ENV VICTORY_SECONDS=45
 

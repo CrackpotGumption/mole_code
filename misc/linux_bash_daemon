@@ -7,15 +7,45 @@ for command in docker curl python3 systemctl timeout flock; do
 done
 [[ -f /etc/mole-cabinet/cabinet.conf ]] || { echo 'Run linux_setup first.' >&2; exit 1; }
 install -d -m 0755 /usr/local/lib/mole-cabinet
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+install -m 0755 "$script_dir/collect_host_info.py" /usr/local/lib/mole-cabinet/collect-host-info
+install -m 0755 "$script_dir/host_agent.py" /usr/local/lib/mole-cabinet/host-agent
+install -m 0755 "$script_dir/update_installation.py" /usr/local/lib/mole-cabinet/update-installation
+python3 -c 'import datetime,json,pathlib,sys; p=pathlib.Path("/etc/mole-cabinet/install-info.json"); old=json.loads(p.read_text()) if p.exists() else {}; old.update(repository=str(pathlib.Path(sys.argv[1]).resolve()), administrator=sys.argv[2] if sys.argv[2] != "root" else old.get("administrator", "root"), installed_at=datetime.datetime.now(datetime.timezone.utc).isoformat()); p.write_text(json.dumps(old)+"\n")' "$script_dir/.." "${SUDO_USER:-root}"
+chmod 0600 /etc/mole-cabinet/install-info.json
+cat > /etc/systemd/system/mole-host-agent.service <<'HOSTUNIT'
+[Unit]
+Description=Mole cabinet host API bridge
+After=network.target
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/lib/mole-cabinet/host-agent
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=mole-host-agent
+RuntimeDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
+HOSTUNIT
+systemctl daemon-reload
+systemctl enable mole-host-agent.service
+systemctl restart mole-host-agent.service
 cat > /usr/local/lib/mole-cabinet/launch <<'LAUNCHER'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+cabinet_config_mode=$(stat -Lc '%a' /etc/mole-cabinet/cabinet.conf)
+if [[ $(stat -Lc '%u' /etc/mole-cabinet/cabinet.conf) != 0 ]] || (( (8#$cabinet_config_mode & 022) != 0 )); then
+    echo 'INVALID CABINET CONFIGURATION: cabinet.conf must be root-owned and not group/world-writable.' >&2
+    exit 1
+fi
 source /etc/mole-cabinet/cabinet.conf
+: "${CONTAINER_NAME:=mole-game}" "${SERIAL_DEVICE:=}" "${STATUS_BIND:=0.0.0.0}" "${STATUS_PORT:=8080}"
 [[ -n ${IMAGE:-} && $IMAGE != *REPLACE_WITH* ]] || { echo "Set IMAGE in /etc/mole-cabinet/cabinet.conf before starting." >&2; exit 1; }
 exec 9>/run/mole-cabinet.lock
 flock -n 9 || exit 0
-[[ $CONTAINER_NAME =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || exit 1
-[[ $STATUS_PORT =~ ^[0-9]+$ ]] && ((STATUS_PORT > 0 && STATUS_PORT < 65536)) || exit 1
+[[ $CONTAINER_NAME =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || { echo "INVALID CONTAINER_NAME" >&2; exit 1; }
+[[ $STATUS_PORT =~ ^[0-9]+$ ]] && ((STATUS_PORT > 0 && STATUS_PORT < 65536)) || { echo "INVALID STATUS_PORT" >&2; exit 1; }
 # Wait for USB enumeration, never guess between multiple connected devices.
 for ((attempt=0; attempt<30; attempt++)); do
     if [[ -n $SERIAL_DEVICE ]]; then
@@ -38,14 +68,17 @@ if [[ -z $SERIAL_DEVICE ]]; then
     else
         echo 'NO SERIAL DEVICE FOUND' >&2
     fi
-    exit 1
 elif [[ ! -c $SERIAL_DEVICE ]]; then
     echo 'NO SERIAL DEVICE FOUND' >&2
     printf 'Configured SERIAL_DEVICE is unavailable: %s\n' "$SERIAL_DEVICE" >&2
-    exit 1
+    SERIAL_DEVICE=''
 fi
+serial_args=()
+if [[ -n $SERIAL_DEVICE ]]; then serial_args=(--device "$SERIAL_DEVICE:/dev/cabinet-arduino"); fi
 # A failed pull preserves the previously installed image/container.
-if ! timeout 45 docker pull "$IMAGE"; then
+pull_seconds=45
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then pull_seconds=300; fi
+if ! timeout "$pull_seconds" docker pull "$IMAGE"; then
     echo 'Image pull failed; using installed image if available.' >&2
 fi
 if ! image_id=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null); then
@@ -56,10 +89,11 @@ if ! image_id=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null); t
     }
     docker image inspect "$image_id" >/dev/null
 fi
+python3 /usr/local/lib/mole-cabinet/collect-host-info /usr/local/lib/mole-cabinet/host-info.json "$image_id" "$IMAGE"
 healthy() {
     [[ $(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null) == true ]] || return 1
     docker exec "$CONTAINER_NAME" python -c \
-        'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/state", timeout=2).read()' >/dev/null 2>&1
+        'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=2).read()' >/dev/null 2>&1
 }
 wait_healthy() {
     for ((check=0; check<30; check++)); do
@@ -70,24 +104,33 @@ wait_healthy() {
 }
 launch_game() {
     local backup="${CONTAINER_NAME}-previous" had_previous=false
-    # Never overwrite an unresolved rollback container.
+    # Recover an interrupted update without overwriting the known previous image.
     if docker container inspect "$backup" >/dev/null 2>&1; then
-        echo "Resolve existing rollback container $backup before updating." >&2
-        return 1
+        had_previous=true
+        if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            if healthy; then
+                docker rm "$backup" >/dev/null
+                had_previous=false
+            else
+                docker rm -f "$CONTAINER_NAME" >/dev/null
+            fi
+        fi
     fi
-    if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+    if [[ $had_previous == false ]] && docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
         had_previous=true
         docker stop --time 15 "$CONTAINER_NAME" >/dev/null
         docker rename "$CONTAINER_NAME" "$backup"
     fi
+    local status_publish="$STATUS_BIND:$STATUS_PORT:8080"
+    if [[ $STATUS_BIND == *:* ]]; then status_publish="[$STATUS_BIND]:$STATUS_PORT:8080"; fi
     local audio_args=(--env AUDIO_ENABLED=0)
     if [[ -d /dev/snd ]]; then
         audio_args=(--device /dev/snd:/dev/snd --env "AUDIO_ENABLED=${AUDIO_ENABLED:-1}")
     fi
     if docker run -d --name "$CONTAINER_NAME" --restart unless-stopped \
-        --device "$SERIAL_DEVICE:/dev/cabinet-arduino" \
+        "${serial_args[@]}" \
         --env ARDUINO_PORT=/dev/cabinet-arduino --env STATUS_PORT=8080 \
-        --env GAME_STATE_PATH=/data/progress.json \
+        --env GAME_LOG_PATH=/data/game-events.jsonl \
         --env "FAILURE_SECONDS=${FAILURE_SECONDS:-15}" \
         --env "VICTORY_SECONDS=${VICTORY_SECONDS:-45}" \
         --env "IDLE_FRAME_SECONDS=${IDLE_FRAME_SECONDS:-2}" \
@@ -97,12 +140,20 @@ launch_game() {
         --env "AUDIO_DEVICE=${AUDIO_DEVICE:-default}" \
         --env "AUDIO_ENABLED=${AUDIO_ENABLED:-1}" \
         "${audio_args[@]}" \
+        --mount type=bind,source=/run/mole-host-agent,target=/run/mole-host-agent,readonly \
+        --mount type=bind,source=/usr/local/lib/mole-cabinet/host-info.json,target=/run/mole-host-info.json,readonly \
         --mount type=volume,source=mole-game-data,target=/data \
-        --publish "$STATUS_BIND:$STATUS_PORT:8080" \
+        --publish "$status_publish" \
         --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
         --label mole-cabinet.managed=true "$image_id" && wait_healthy; then
         if [[ $had_previous == true ]]; then docker rm "$backup" >/dev/null; fi
         echo 'Mole Game is running; state endpoint responds.'
+        return 0
+    fi
+    # A reachable API in FAULT/MAINTENANCE is intentionally retained for recovery.
+    if docker exec "$CONTAINER_NAME" python -c \
+        'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/diagnostics", timeout=2).read()' >/dev/null 2>&1; then
+        echo 'Cabinet API is available in a degraded state; inspect /health and /diagnostics.' >&2
         return 0
     fi
     echo 'New game failed startup; restoring previous container.' >&2
@@ -122,8 +173,8 @@ cat > /etc/systemd/system/mole-cabinet.service <<'UNIT'
 [Unit]
 Description=Update and launch Mole Game cabinet
 Wants=network-online.target
-After=network-online.target docker.service
-Requires=docker.service
+After=network-online.target docker.service mole-host-agent.service
+Requires=docker.service mole-host-agent.service
 StartLimitIntervalSec=0
 
 [Service]

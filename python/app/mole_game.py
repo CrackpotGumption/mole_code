@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 
 from .bugs import BUGS, Color
 from .game import calculate_whack_order
-from .progress_store import ProgressStore
+from .state_log import StateLog
+from pathlib import Path
 from .audio_cues import SilentAudio
 
 
@@ -317,6 +318,7 @@ class MoleGame:
         self,
         arduino,
         state_path=None,
+        state_log_path=None,
         audio=None,
         failure_seconds=15.0,
         victory_seconds=45.0,
@@ -345,39 +347,80 @@ class MoleGame:
         self._last_hit = {}
         self._next_idle_frame = 0.0
         self.persistence_error = None
-        self._progress_store = ProgressStore(state_path, PLAYER_IDS) if state_path else None
-        if self._progress_store is not None:
-            completed, ticket_requested = self._progress_store.load()
-            self.state.completed_players = completed
-            self.state.ticket_dispensed = ticket_requested
-            if ticket_requested:
-                self.state.ticket_status = "REQUESTED - DELIVERY UNCONFIRMED"
+        log_path = state_log_path or (Path(state_path).with_name('game-events.jsonl') if state_path else None)
+        self.state_log = StateLog(log_path)
+        self.log_state('SESSION_STARTED_FRESH')
 
-    def _save_progress(self):
-        if self._progress_store is None:
-            return
-        try:
-            self._progress_store.save(self.state.completed_players, self.state.ticket_dispensed)
-        except Exception as error:
-            self.persistence_error = str(error)
-            self.state.locked = True
-            raise
+    def log_state(self, event):
+        self.state_log.record(event, self.get_state_dict())
 
-    def restore_hardware(self):
-        """Restore indicators without resuming an interrupted physical round."""
+    def initialize_hardware(self):
+        """Start from base outputs; never load old game or payout state."""
         with self._event_lock:
             self.arduino.send("SENSORS DISABLE")
             self.arduino.send("MOLES ALL DOWN")
             self.arduino.send("LIGHTS OFF")
             self.arduino.send("PLAYER_LIGHTS OFF")
-            for player in sorted(self.state.completed_players):
-                self.arduino.send(f"PLAYER_LIGHT {PLAYER_INDEX[player]} GREEN")
             self.arduino.wait_until_idle()
-            if self.state.completed_players == set(PLAYER_IDS):
-                self.complete_full_game()
             self.tick_idle()
 
+    @staticmethod
+    def validate_admin_state(payload):
+        if not isinstance(payload, dict):
+            raise ValueError('state must be an object')
+        if 'completed_players' not in payload and 'active_player' not in payload:
+            raise ValueError('Provide completed_players or active_player')
+        players = payload.get('completed_players', [])
+        active = payload.get('active_player')
+        progress = payload.get('hit_progress', 0)
+        requested = payload.get('ticket_requested', payload.get('ticket_dispensed', False))
+        if (not isinstance(players, list) or any(player not in PLAYER_IDS for player in players)
+                or len(set(players)) != len(players) or active is not None and active not in PLAYER_IDS
+                or active in players or type(progress) is not int or not 0 <= progress <= 4
+                or type(requested) is not bool or requested and set(players) != set(PLAYER_IDS)
+                or active is None and progress not in (0, 4)):
+            raise ValueError('Invalid administrator game state')
+        if active is None:
+            progress = 0
+        if active and progress == 4:
+            players = [*players, active]
+            active, progress = None, 0
+        return {'completed_players': players, 'active_player': active, 'hit_progress': progress,
+                'ticket_requested': requested}
 
+    def apply_admin_state(self, payload, hardware=True):
+        data = self.validate_admin_state(payload)
+        with self._event_lock:
+            self.state = GameState(completed_players=set(data['completed_players']), active_player=data['active_player'],
+                                   hit_progress=data['hit_progress'], ticket_dispensed=data['ticket_requested'])
+            self.state.ticket_status = 'ADMIN RESTORED REQUESTED' if data['ticket_requested'] else 'NOT REQUESTED'
+            if self.state.active_player:
+                self.assign_colors()
+                queen, targets = calculate_whack_order(self.state.bug_colors)
+                self.state.queen = queen.name
+                self.state.whack_order = [bug.name for bug in targets]
+            if hardware:
+                self.initialize_hardware()
+                for player in sorted(self.state.completed_players):
+                    self.arduino.send(f'PLAYER_LIGHT {PLAYER_INDEX[player]} GREEN')
+                if self.state.active_player:
+                    self.arduino.send(f'PLAYER_LIGHT {PLAYER_INDEX[self.state.active_player]} YELLOW')
+                    for name, color in self.state.bug_colors.items():
+                        mole = MOLE_ID_BY_NAME[name]
+                        if name not in self.state.whack_order[:self.state.hit_progress]:
+                            self.arduino.send(f'MOLE {mole} UP')
+                            r, g, b = RGB[color]
+                            self.arduino.send(f'LIGHT {mole} {r} {g} {b}')
+                    self._resume_hit_detection()
+                    self.state.locked = False
+                    self.state.status = 'PLAYING'
+                else:
+                    self.state.status = 'GAME COMPLETE' if self.state.completed_players == set(PLAYER_IDS) else 'WAITING FOR BADGE'
+                self.arduino.wait_until_idle()
+            else:
+                self.state.status = 'MAINTENANCE'
+            # Restoring progress never triggers ticket payout or a celebration.
+            self.log_state('ADMIN_STATE_APPLIED' if hardware else 'ADMIN_STATE_STAGED')
 
     def tick_idle(self):
         """Animate idle mole rings without blocking badge handling or shows."""
@@ -849,6 +892,7 @@ class MoleGame:
             "PLAYING"
         )
         self.audio.play("game_start")
+        self.log_state("ROUND_STARTED")
 
 
     # ========================================================
@@ -1076,6 +1120,7 @@ class MoleGame:
         # Advance progress.
 
         self.state.hit_progress += 1
+        self.log_state("HIT_CORRECT")
 
 
         print(
@@ -1136,6 +1181,7 @@ class MoleGame:
         self.state.status = (
             "WRONG - RESETTING"
         )
+        self.log_state("HIT_WRONG")
 
 
         # ----------------------------------------------------
@@ -1226,6 +1272,7 @@ class MoleGame:
 
     def _run_show(self, seconds, victory=False, on_start=None):
         self.state.status = "VICTORY CELEBRATION" if victory else "LAUGH AT YOU"
+        self.log_state("SHOW_STARTED")
         self._accept_samples_after = float("inf")
         self.arduino.wait_until_idle()
         if self.stop_requested():
@@ -1339,7 +1386,6 @@ class MoleGame:
         self.state.completed_players.add(
             player_id
         )
-        self._save_progress()
 
 
         player_index = (
@@ -1421,6 +1467,8 @@ class MoleGame:
     # ALL SIX PLAYERS COMPLETE
     # ========================================================
 
+        self.log_state("PLAYER_COMPLETED")
+
     def complete_full_game(self):
 
         print()
@@ -1477,13 +1525,13 @@ class MoleGame:
             not self.state.ticket_dispensed
         ):
 
-            # Persist the intent BEFORE queuing the physical payout. This prevents
-            # duplicate requests after reboot, but cannot confirm physical delivery.
+            # Payout intent is in-memory for this session; log it before issuing payout.
             self.state.ticket_dispensed = True
-            self._save_progress()
+            self.log_state('TICKET_REQUESTED')
             self.state.ticket_status = "REQUESTED"
             self.run_victory_show()
             self.state.status = "GAME COMPLETE"
+            self.log_state("GAME_COMPLETE")
 
 
     # ========================================================
@@ -1572,6 +1620,9 @@ class MoleGame:
                 self.state.ticket_status = "ERROR"
         except ValueError:
             return
+
+        if line.startswith("TICKET_"):
+            self.log_state("TICKET_PROGRESS")
 
     def handle_arduino_event(self, line, received_at=None):
         with self._event_lock:
@@ -1756,6 +1807,21 @@ class MoleGame:
 
         return {
 
+            "solve_state": {
+                "fully_solved": self.state.completed_players == set(PLAYER_IDS),
+                "completed_count": len(self.state.completed_players),
+                "total_players": len(PLAYER_IDS),
+                "players": {player: ("SOLVED" if player in self.state.completed_players
+                                      else "ACTIVE" if player == self.state.active_player else "PENDING")
+                            for player in PLAYER_IDS},
+                "current_steps_completed": self.state.hit_progress,
+                "current_steps_total": len(self.state.whack_order),
+                "next_expected_mole": (self.state.whack_order[self.state.hit_progress]
+                                       if self.state.active_player and self.state.hit_progress < len(self.state.whack_order)
+                                       else None),
+                "ticket_requested": self.state.ticket_dispensed,
+                "physical_payout_confirmed": self.state.ticket_status == "DONE",
+            },
             "active_player":
                 self.state.active_player,
 
