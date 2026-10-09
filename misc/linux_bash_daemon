@@ -31,7 +31,19 @@ for ((attempt=0; attempt<30; attempt++)); do
     fi
     sleep 2
 done
-[[ -n $SERIAL_DEVICE && -c $SERIAL_DEVICE ]] || { echo 'Arduino missing or ambiguous; set SERIAL_DEVICE.' >&2; exit 1; }
+if [[ -z $SERIAL_DEVICE ]]; then
+    if ((${#devices[@]} > 1)); then
+        echo 'MULTIPLE SERIAL DEVICES FOUND: set SERIAL_DEVICE in /etc/mole-cabinet/cabinet.conf.' >&2
+        printf '  %s\n' "${devices[@]}" >&2
+    else
+        echo 'NO SERIAL DEVICE FOUND' >&2
+    fi
+    exit 1
+elif [[ ! -c $SERIAL_DEVICE ]]; then
+    echo 'NO SERIAL DEVICE FOUND' >&2
+    printf 'Configured SERIAL_DEVICE is unavailable: %s\n' "$SERIAL_DEVICE" >&2
+    exit 1
+fi
 # A failed pull preserves the previously installed image/container.
 if ! timeout 45 docker pull "$IMAGE"; then
     echo 'Image pull failed; using installed image if available.' >&2
@@ -131,5 +143,9 @@ if systemctl cat run-plainraw.service >/dev/null 2>&1; then
 fi
 systemctl daemon-reload
 systemctl enable mole-cabinet.service
-systemctl restart mole-cabinet.service
+if ! systemctl restart mole-cabinet.service; then
+    # Show the actual launcher failure alongside systemd's generic summary.
+    journalctl -u mole-cabinet.service -n 20 --no-pager -o cat >&2 || true
+    exit 1
+fi
 printf 'Autostart installed and game started. Status: sudo systemctl status mole-cabinet\nLogs: sudo journalctl -u mole-cabinet -f\n'

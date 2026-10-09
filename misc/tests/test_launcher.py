@@ -107,3 +107,41 @@ class LauncherTests(unittest.TestCase):
                                 env=dict(os.environ, IMAGE='REPLACE_WITH_IMAGE'))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Set IMAGE', result.stderr)
+
+
+class SerialDiscoveryTests(unittest.TestCase):
+    def discover(self, count=0, configured=''):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for index in range(count):
+                (root / f'ttyUSB{index}').symlink_to('/dev/null')
+            block = LAUNCHER.split('# Wait for USB enumeration,', 1)[1].split('# A failed pull', 1)[0]
+            block = '# Wait for USB enumeration,' + block
+            block = block.replace('/dev/serial/by-id/*', str(root / 'by-id' / '*'))
+            block = block.replace('/dev/ttyACM*', str(root / 'ttyACM*'))
+            block = block.replace('/dev/ttyUSB*', str(root / 'ttyUSB*'))
+            return subprocess.run(['bash', '-c', 'set -eu; sleep() { :; }; ' + block],
+                                  env=dict(os.environ, SERIAL_DEVICE=configured),
+                                  capture_output=True, text=True)
+
+    def test_missing_device_has_exact_message(self):
+        result = self.discover()
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr.strip(), 'NO SERIAL DEVICE FOUND')
+
+    def test_invalid_configured_device(self):
+        result = self.discover(configured='/not/a/serial/device')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('NO SERIAL DEVICE FOUND', result.stderr)
+        self.assertIn('Configured SERIAL_DEVICE is unavailable', result.stderr)
+
+    def test_multiple_devices_listed(self):
+        result = self.discover(count=2)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('MULTIPLE SERIAL DEVICES FOUND', result.stderr)
+        self.assertIn('ttyUSB0', result.stderr)
+        self.assertIn('ttyUSB1', result.stderr)
+
+    def test_single_device_selected(self):
+        result = self.discover(count=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
