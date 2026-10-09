@@ -3239,6 +3239,18 @@ void handleCommand(
 
 
 
+  int stripR, stripG, stripB;
+  if (sscanf(command.c_str(), "PLAYER_LIGHTS %d %d %d", &stripR, &stripG, &stripB) == 3) {
+    uint32_t color = playerLights.Color(constrain(stripR, 0, 255),
+                                       constrain(stripG, 0, 255), constrain(stripB, 0, 255));
+    for (uint8_t player = 0; player < PLAYER_COUNT; player++) {
+      playerLights.setPixelColor(player, color);
+    }
+    playerLights.show();
+    Serial.println("OK PLAYER_LIGHTS RGB");
+    return;
+  }
+
   if (
 
     command == "PLAYER_LIGHTS OFF"

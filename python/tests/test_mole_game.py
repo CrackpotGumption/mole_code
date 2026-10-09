@@ -102,8 +102,8 @@ class AccelGameTests(unittest.TestCase):
                 sample_time += 1
                 self.sample(self.expected(), -1900, timestamp=sample_time)
                 self.sample(self.expected(), timestamp=sample_time + 0.1)
-        self.assertEqual(self.game.state.completed_players, set(PLAYER_IDS))
-        self.assertEqual(self.game.state.status, "GAME COMPLETE")
+        self.assertEqual(self.game.state.completed_players, set())
+        self.assertEqual(self.game.state.status, "WAITING FOR BADGE")
         self.game.complete_full_game()
         self.assertEqual(self.hardware.commands.count("TICKET 7"), 1)
 

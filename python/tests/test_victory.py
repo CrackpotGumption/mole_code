@@ -58,18 +58,22 @@ class VictoryTests(unittest.TestCase):
         down = next(t for t, command in timing if command == 'MOLE 0 DOWN')
         replacement = next(t for t, command in timing if command == 'MOLE 1 UP')
         self.assertGreaterEqual(replacement - down, 0.2 - 0.0001)
-        self.assertEqual(self.game.state.completed_players, set(PLAYER_IDS))
-        self.assertEqual(self.game.state.status, 'GAME COMPLETE')
-        self.assertEqual(self.game.state.ticket_status, 'DONE')
-        self.assertEqual(self.game.state.tickets_dispensed, 7)
+        self.assertEqual(self.game.state.completed_players, set())
+        self.assertEqual(self.game.state.status, 'WAITING FOR BADGE')
+        self.assertEqual(self.game.state.ticket_status, 'NOT REQUESTED')
+        self.assertEqual(self.game.state.tickets_dispensed, 0)
         for player in range(6):
             rgb = [command for command in self.hardware.commands
                    if command.startswith(f'PLAYER_LIGHT {player} ') and len(command.split()) == 5]
             self.assertGreater(len(set(rgb)), 2)
-            self.assertIn(f'PLAYER_LIGHT {player} GREEN', self.hardware.commands[-6:])
+            self.assertIn(f'PLAYER_LIGHT {player} GREEN', self.hardware.commands)
         self.game.complete_full_game()
         self.assertEqual(self.hardware.commands.count('TICKET 7'), 1)
         self.audio.play_victory.assert_called_once()
+        self.game.handle_rfid('001')
+        self.assertEqual(self.game.state.active_player, '001')
+        self.assertEqual(self.game.state.status, 'PLAYING')
+        self.assertFalse(self.game.state.ticket_dispensed)
 
     def test_ticket_timeout_and_configuration(self):
         self.game.handle_arduino_event('TICKET_START 7')

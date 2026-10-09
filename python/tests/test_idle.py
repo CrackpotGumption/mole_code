@@ -24,8 +24,9 @@ class IdleRainbowTests(unittest.TestCase):
     def test_idle_animates_then_badge_uses_puzzle_colors(self):
         with patch('app.mole_game.time.monotonic', return_value=100):
             self.game.initialize_hardware()
-        first = self.hardware.commands[-5:]
-        self.assertTrue(all(command.startswith('LIGHT ') for command in first))
+        first = self.hardware.commands[-6:]
+        self.assertEqual(sum(command.startswith('LIGHT ') for command in first), 5)
+        self.assertEqual(sum(command.startswith('PLAYER_LIGHTS ') for command in first), 1)
         self.assertNotIn('MOLES ALL UP', self.hardware.commands)
         count = len(self.hardware.commands)
         with patch('app.mole_game.time.monotonic', return_value=100.1):
@@ -33,9 +34,11 @@ class IdleRainbowTests(unittest.TestCase):
         self.assertEqual(len(self.hardware.commands), count)
         with patch('app.mole_game.time.monotonic', return_value=102):
             self.game.tick_idle()
-        self.assertNotEqual(self.hardware.commands[-5:], first)
+        self.assertNotEqual(self.hardware.commands[-6:], first)
         self.game.handle_arduino_event('RFID 001')
         self.assertEqual(self.game.state.status, 'PLAYING')
+        self.assertIn('PLAYER_LIGHT 0 YELLOW', self.hardware.commands)
+        self.assertIn('PLAYER_LIGHT 5 OFF', self.hardware.commands)
         for bug, color in self.game.state.bug_colors.items():
             r, g, b = RGB[color]
             self.assertIn(f'LIGHT {MOLE_ID_BY_NAME[bug]} {r} {g} {b}', self.hardware.commands)
@@ -52,7 +55,7 @@ class IdleRainbowTests(unittest.TestCase):
         self.hardware.commands.clear()
         self.game.tick_idle()
         self.assertEqual(len(self.hardware.commands), 5)
-        self.assertTrue(all(command.startswith('LIGHT ') for command in self.hardware.commands))
+        self.assertEqual(sum(command.startswith('PLAYER_LIGHTS ') for command in self.hardware.commands), 0)
         self.assertEqual(self.game.state.completed_players, {'001'})
         self.assertEqual(self.game.state.status, 'WAITING FOR BADGE')
 
@@ -66,15 +69,16 @@ class IdleRainbowTests(unittest.TestCase):
         self.assertEqual(game.state.completed_players, set())
         self.assertIn('PLAYER_LIGHTS OFF', self.hardware.commands)
 
-    def test_idle_after_final_victory_does_not_reset_completions(self):
+    def test_idle_after_final_victory_resets_completions(self):
         self.game.state.completed_players = {'001', '002', '003', '004', '005', '006'}
-        self.game.state.ticket_dispensed = True
+        self.game.state.ticket_dispensed = False
         self.game.complete_full_game()
         self.hardware.commands.clear()
+        self.game._next_idle_frame = 0
         self.game.tick_idle()
-        self.assertEqual(len(self.hardware.commands), 5)
-        self.assertEqual(len(self.game.state.completed_players), 6)
-        self.assertEqual(self.game.state.status, 'GAME COMPLETE')
+        self.assertEqual(len(self.hardware.commands), 6)
+        self.assertEqual(len(self.game.state.completed_players), 0)
+        self.assertEqual(self.game.state.status, 'WAITING FOR BADGE')
 
     def test_no_idle_frames_during_shows_shutdown_or_busy_queue(self):
         for status in ('SETTING UP ROUND', 'LAUGH AT YOU', 'VICTORY CELEBRATION'):
@@ -103,7 +107,7 @@ class IdleRainbowTests(unittest.TestCase):
         self.assertEqual(len(self.hardware.commands), count)
         with patch('app.mole_game.time.monotonic', return_value=104):
             game.tick_idle()
-        self.assertEqual(len(self.hardware.commands), count + 5)
+        self.assertEqual(len(self.hardware.commands), count + 6)
 
     def test_console_badge_formats(self):
         self.hardware.event_queue = queue.Queue()
@@ -119,3 +123,19 @@ class IdleRainbowTests(unittest.TestCase):
             keyboard_rfid_loop(self.hardware, threading.Event())
         self.assertEqual(self.hardware.commands, ['RFID STATUS', 'RFID INIT'])
         self.assertTrue(self.hardware.event_queue.empty())
+
+    def test_two_solved_players_keep_status_between_rounds(self):
+        for player in ('001', '002'):
+            self.game.handle_rfid(player)
+            for _ in range(4):
+                mole = self.game.state.whack_order[self.game.state.hit_progress]
+                self.game.handle_hit(MOLE_ID_BY_NAME[mole])
+        self.assertIn('PLAYER_LIGHT 0 GREEN', self.hardware.commands)
+        self.assertIn('PLAYER_LIGHT 1 GREEN', self.hardware.commands)
+        self.assertIn('PLAYER_LIGHT 5 OFF', self.hardware.commands)
+        self.hardware.commands.clear()
+        self.game._next_idle_frame = 0
+        self.game.tick_idle()
+        self.assertEqual(len(self.hardware.commands), 5)
+        self.assertTrue(all(command.startswith('LIGHT ') for command in self.hardware.commands))
+        self.assertEqual(self.game.state.completed_players, {'001', '002'})

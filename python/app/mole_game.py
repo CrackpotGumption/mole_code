@@ -423,7 +423,7 @@ class MoleGame:
             self.log_state('ADMIN_STATE_APPLIED' if hardware else 'ADMIN_STATE_STAGED')
 
     def tick_idle(self):
-        """Animate idle mole rings without blocking badge handling or shows."""
+        """Animate idle rings and player LEDs without blocking badges or shows."""
         if not self._event_lock.acquire(blocking=False):
             return
         try:
@@ -441,6 +441,12 @@ class MoleGame:
                 rgb = colorsys.hsv_to_rgb((now / 30 + mole / 5) % 1, 1, 1)
                 r, g, b = (int(channel * 255) for channel in rgb)
                 self.arduino.send(f"LIGHT {mole} {r} {g} {b}", quiet=True)
+            # A partially solved session keeps its per-player progress colors.
+            # Only a fresh game animates the player strip as one unit.
+            if not self.state.completed_players:
+                rgb = colorsys.hsv_to_rgb((now / 30) % 1, 1, 1)
+                r, g, b = (int(channel * 255) for channel in rgb)
+                self.arduino.send(f"PLAYER_LIGHTS {r} {g} {b}", quiet=True)
             self._next_idle_frame = now + self.idle_frame_seconds
         finally:
             self._event_lock.release()
@@ -623,6 +629,12 @@ class MoleGame:
         #
         # We intentionally allow players to switch.
         # ----------------------------------------------------
+
+        # Replace idle rainbow colors with actual player status before play.
+        if self.state.active_player is None:
+            for player in PLAYER_IDS:
+                color = "GREEN" if player in self.state.completed_players else "OFF"
+                self.arduino.send(f"PLAYER_LIGHT {PLAYER_INDEX[player]} {color}")
 
         previous_player = (
             self.state.active_player
@@ -1314,7 +1326,7 @@ class MoleGame:
                     raised.add(mole)
                     raised_at[mole] = time.monotonic()
                     self.arduino.send(f"MOLE {mole} UP")
-                    r, g, b = random.choice(tuple(RGB.values()))
+                    r, g, b = random.choice(tuple(RGB.values())) if victory else (255, 0, 0)
                     self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
                 if ready:
                     next_motion = now + motion_interval
@@ -1330,8 +1342,7 @@ class MoleGame:
                     raised = selected
                     if not victory:
                         for mole in sorted(raised):
-                            r, g, b = random.choice(tuple(RGB.values()))
-                            self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
+                            self.arduino.send(f"LIGHT {mole} 255 0 0")
                     next_motion = now + motion_interval
                 if victory and now >= next_rainbow:
                     for mole in range(5):
@@ -1448,7 +1459,9 @@ class MoleGame:
             >= len(PLAYER_IDS)
         ):
 
+            self.log_state("PLAYER_COMPLETED")
             self.complete_full_game()
+            return
 
         else:
 
@@ -1470,6 +1483,8 @@ class MoleGame:
         self.log_state("PLAYER_COMPLETED")
 
     def complete_full_game(self):
+        if self.state.completed_players != set(PLAYER_IDS):
+            return
 
         print()
         print("==============================")
@@ -1532,6 +1547,14 @@ class MoleGame:
             self.run_victory_show()
             self.state.status = "GAME COMPLETE"
             self.log_state("GAME_COMPLETE")
+            if self._stopping or self.stop_requested():
+                return
+            self.arduino.send("SAFE STOP")
+            self.arduino.wait_until_idle()
+            self.state = GameState()
+            self._next_idle_frame = 0.0
+            self.initialize_hardware()
+            self.log_state("VICTORY_RESET_TO_IDLE")
 
 
     # ========================================================

@@ -312,3 +312,5 @@ Use a separate health reader that preserves 503 reports. Host jobs and serial re
 Persisted: observed game-event logs (current 5 MiB file plus three rotated files), application settings, firmware/fault history, host configuration, host job history. Not persisted: live game progress/payout recovery, maintenance, staged restore, cabinet operations, serial receipts. Game events contain timestamp/session_id/event/state; the event session is separate from the serial session. Firmware telemetry and API snapshots are observations rather than independent physical measurements.
 
 No cancellation endpoint, arbitrary file reader, SSH-key reader, arbitrary shell executor, network reconfiguration endpoint, fleet discovery endpoint, or automatic game restoration is implemented. API self-description is an inventory, not a complete schema; use this reference and the OpenAPI file together. Future endpoint changes should update both artifacts against the handlers and serializers.
+
+Strip-wide command: `PLAYER_LIGHTS <r> <g> <b>` sets all six player pixels in one update (firmware 3.0.1). Idle uses this once per frame; gameplay keeps individual player colors.

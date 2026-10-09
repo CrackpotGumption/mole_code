@@ -197,3 +197,5 @@ maintenance serial command. Power loss discards the staged restore, too.
   metrics database. Current serial receipts are bounded/in-memory; fault, firmware,
   game-event, settings and host-job histories persist. The API reports no fictional
   physical measurements; unsupported sensors and absent host tools remain unknown.
+
+Strip-wide command: `PLAYER_LIGHTS <r> <g> <b>` sets all six player pixels in one update (firmware 3.0.1). Idle uses this once per frame; gameplay keeps individual player colors.
