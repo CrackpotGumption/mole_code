@@ -6,7 +6,7 @@ import shutil
 import sys
 
 NAME = 'MOLE_FINAL_NO_INTERVAL_v2'
-VERSION = '3.0.1'
+VERSION = '3.0.2'
 
 def prepare(source, destination):
     source = Path(source)

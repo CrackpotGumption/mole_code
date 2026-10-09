@@ -314,6 +314,8 @@ Adafruit_NeoPixel playerLights(
 
 // ============================================================
 
+Adafruit_NeoPixel playerLightsAlternate(PLAYER_COUNT, 7, NEO_GRB + NEO_KHZ800);
+
 // RFID RC522
 
 //
@@ -1410,6 +1412,13 @@ void turnAllMoleLightsOff() {
 
 
 
+// Mirror one six-pixel buffer to both pins, allowing a D6/D7 wiring fallback.
+void showPlayerLights() {
+  memcpy(playerLightsAlternate.getPixels(), playerLights.getPixels(), PLAYER_COUNT * 3);
+  playerLights.show();
+  playerLightsAlternate.show();
+}
+
 void setPlayerLight(
 
   int player,
@@ -1462,7 +1471,7 @@ void setPlayerLight(
 
 
 
-  playerLights.show();
+  showPlayerLights();
 
 }
 
@@ -1556,7 +1565,7 @@ void clearPlayerLights() {
 
 
 
-  playerLights.show();
+  showPlayerLights();
 
 }
 
@@ -3246,7 +3255,7 @@ void handleCommand(
     for (uint8_t player = 0; player < PLAYER_COUNT; player++) {
       playerLights.setPixelColor(player, color);
     }
-    playerLights.show();
+    showPlayerLights();
     Serial.println("OK PLAYER_LIGHTS RGB");
     return;
   }
@@ -4048,6 +4057,8 @@ void setup() {
 
 
   playerLights.begin();
+  playerLightsAlternate.begin();
+  playerLightsAlternate.setBrightness(50);
   reportRFIDCheckpoint("AFTER PLAYER BEGIN");
 
 
@@ -4063,7 +4074,7 @@ void setup() {
   reportRFIDCheckpoint("AFTER PLAYER BRIGHTNESS");
   playerLights.clear();
   reportRFIDCheckpoint("AFTER PLAYER BUFFER CLEAR");
-  playerLights.show();
+  showPlayerLights();
   reportRFIDCheckpoint("AFTER PLAYER LEDS");
 
 
