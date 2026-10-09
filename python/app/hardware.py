@@ -353,7 +353,7 @@ class ArduinoController:
                 )
 
 
-            except serial.SerialException as e:
+            except (serial.SerialException, OSError, TypeError) as e:
                 if not self.running:
                     return  # Expected if close() interrupts an in-flight read.
                 print(
@@ -361,7 +361,9 @@ class ArduinoController:
                 )
 
                 self.failure_reason = f"SERIAL READ ERROR: {e}"
+                self._record_error(self.failure_reason)
                 self.running = False
+                self._ready_event.set()
 
                 return
 
@@ -562,11 +564,24 @@ class ArduinoController:
     def close(self):
 
         self.running = False
+        self.command_ack.set()
         if hasattr(self, '_receipt_lock'):
             with self._receipt_lock:
                 for receipt in self._receipts.values():
                     if receipt['status'] in ('QUEUED', 'SENT'):
                         receipt.update(status='CANCELLED', finished_at=time.time())
+
+        # Interrupt reads without invalidating pyserial's fd underneath os.read.
+        try:
+            cancel_read = getattr(self.serial, 'cancel_read', None)
+            if callable(cancel_read):
+                cancel_read()
+        except (serial.SerialException, OSError):
+            pass
+        for name in ('reader', 'writer', 'event_worker'):
+            worker = getattr(self, name, None)
+            if worker is not None and worker is not threading.current_thread():
+                worker.join(timeout=2)
 
         try:
 

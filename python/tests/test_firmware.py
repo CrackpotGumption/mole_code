@@ -75,3 +75,9 @@ class FirmwareTests(unittest.TestCase):
         with patch('app.firmware.run') as run:
             self.assertEqual(connect_verified(factory, '/dev/mega', 115200, force_flash=True), 'verified')
         run.assert_called_once()
+
+    def test_explicit_retry_works_with_auto_flash_disabled(self):
+        factory = Mock(side_effect=[TimeoutError('no READY'), 'verified'])
+        with patch.dict('os.environ', {'FIRMWARE_AUTO_FLASH': '0'}), patch('app.firmware.run') as run:
+            self.assertEqual(connect_verified(factory, '/dev/mega', 115200, force_flash=True), 'verified')
+        run.assert_called_once()

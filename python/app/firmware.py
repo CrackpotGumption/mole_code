@@ -61,7 +61,7 @@ def connect_verified(controller_factory, port, baud, on_status=None, force_flash
         except TimeoutError:
             if not force_flash:
                 raise
-        if os.environ.get('FIRMWARE_AUTO_FLASH', '1') == '0':
+        if not force_flash and os.environ.get('FIRMWARE_AUTO_FLASH', '1') == '0':
             raise RuntimeError('Firmware mismatch; automatic flashing is disabled')
         if temporary is not None:
             if not shutil.which('arduino-cli'):
