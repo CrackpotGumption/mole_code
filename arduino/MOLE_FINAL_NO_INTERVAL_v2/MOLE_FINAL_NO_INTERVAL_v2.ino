@@ -1,3 +1,18 @@
+#include "firmware_identity.h"
+#ifdef __AVR__
+#include <avr/wdt.h>
+uint8_t resetCause __attribute__((section(".noinit")));
+void rememberReset() __attribute__((naked, section(".init3")));
+void rememberReset() { resetCause = MCUSR; MCUSR = 0; wdt_disable(); }
+#endif
+bool commandFailed = false;
+bool mcpReady = false;
+bool mcpInitialized = false;
+bool stopOutputsPending = false;
+uint8_t sensorConfiguredMask = 0;
+bool leaseEnabled = false;
+unsigned long lastControllerCommand = 0;
+const unsigned long CONTROLLER_LEASE_MS = 5000;
 #include <Wire.h>
 
 #include <SPI.h>
@@ -414,6 +429,7 @@ unsigned long lastHitTime[MOLE_COUNT] = {
 
 
 String commandBuffer = "";
+bool commandOverflow = false;
 
 
 
@@ -524,7 +540,7 @@ void reportI2CTimeoutIfNeeded() {
 
 
 
-void selectTCAChannel(
+bool selectTCAChannel(
 
   uint8_t channel
 
@@ -534,7 +550,7 @@ void selectTCAChannel(
 
   if (channel > 7) {
 
-    return;
+    return false;
 
   }
 
@@ -556,7 +572,7 @@ void selectTCAChannel(
 
 
 
-  Wire.endTransmission();
+  return Wire.endTransmission() == 0;
 
 }
 
@@ -572,7 +588,7 @@ void selectTCAChannel(
 
 
 
-void writeMPURegister(
+bool writeMPURegister(
 
   uint8_t reg,
 
@@ -596,7 +612,7 @@ void writeMPURegister(
 
 
 
-  Wire.endTransmission();
+  return Wire.endTransmission() == 0;
 
 }
 
@@ -612,7 +628,7 @@ void writeMPURegister(
 
 
 
-void wakeSensor(
+bool wakeSensor(
 
   uint8_t channel
 
@@ -620,7 +636,7 @@ void wakeSensor(
 
 
 
-  selectTCAChannel(channel);
+  if (!selectTCAChannel(channel)) return false;
 
 
 
@@ -628,7 +644,7 @@ void wakeSensor(
 
 
 
-  writeMPURegister(
+  bool awake = writeMPURegister(
 
     0x6B,
 
@@ -639,6 +655,7 @@ void wakeSensor(
 
 
   delay(5);
+  return awake;
 
 }
 
@@ -662,7 +679,7 @@ bool sensorExists(
 
 
 
-  selectTCAChannel(channel);
+  if (!selectTCAChannel(channel)) return false;
 
 
 
@@ -730,13 +747,13 @@ void initializeSensors() {
 
     if (
 
-      sensorExists(channel)
+      sensorExists(channel) && wakeSensor(channel) && configureAccelerometerRange(channel)
 
     ) {
 
 
 
-      wakeSensor(channel);
+      sensorConfiguredMask |= (1 << mole);
 
 
 
@@ -822,7 +839,7 @@ bool readAccelerometer(
 
 
 
-  selectTCAChannel(channel);
+  if (!selectTCAChannel(channel)) return false;
 
 
 
@@ -860,7 +877,7 @@ bool readAccelerometer(
 
   Wire.requestFrom(
 
-    MPU_ADDRESS,
+    (uint8_t)MPU_ADDRESS,
 
     (uint8_t)6
 
@@ -940,7 +957,7 @@ bool readAccelerometer(
 
 
 
-void configureAccelerometerRange(
+bool configureAccelerometerRange(
 
   uint8_t channel
 
@@ -948,7 +965,7 @@ void configureAccelerometerRange(
 
 
 
-  selectTCAChannel(channel);
+  if (!selectTCAChannel(channel)) return false;
 
 
 
@@ -958,7 +975,7 @@ void configureAccelerometerRange(
 
   Wire.write(0x18);       // AFS_SEL = 3 => +/-16g
 
-  Wire.endTransmission();
+  return Wire.endTransmission() == 0;
 
 
 
@@ -1145,6 +1162,7 @@ void setMole(
 
 
 
+  if (!mcpReady) { commandFailed = true; Serial.println("ERROR MCP NOT READY"); return; }
   mcp.digitalWrite(
 
     solenoidOutput[mole],
@@ -1155,6 +1173,9 @@ void setMole(
 
 
 
+  if (mcp.digitalRead(solenoidOutput[mole]) != (up ? HIGH : LOW)) {
+    commandFailed = true; mcpReady = false; stopOutputsPending = true; Serial.println("ERROR OUTPUT READBACK FAILED");
+  }
   lastMechanicalAction = millis();
 
 }
@@ -3041,6 +3062,59 @@ void handleCommand(
 
 
   command.trim();
+  if (command == "KEEPALIVE") {
+    lastControllerCommand = millis(); Serial.println("OK KEEPALIVE"); return;
+  }
+  if (command == "LEASE ON") {
+    leaseEnabled = true; lastControllerCommand = millis(); Serial.println("OK LEASE ON"); return;
+  }
+  if (command == "SAFE STOP") {
+    hitDetectionEnabled = false; puzzleHitArmed = false;
+    ticketMotor(false); ticketPayoutActive = false;
+    stopOutputsPending = true; setAllMoles(false);
+    if (mcpReady && !Wire.getWireTimeoutFlag()) stopOutputsPending = false;
+    turnAllMoleLightsOff(); clearPlayerLights();
+    Serial.println("OK SAFE STOP"); return;
+  }
+  if (command == "HEALTH") {
+    if (!mcpInitialized) {
+      mcpInitialized = mcp.begin_I2C();
+      if (mcpInitialized) for (uint8_t id = 0; id < MOLE_COUNT; id++) {
+        mcp.pinMode(solenoidOutput[id], OUTPUT); mcp.digitalWrite(solenoidOutput[id], LOW);
+      }
+    }
+    Wire.beginTransmission(0x20); uint8_t mcpError = Wire.endTransmission(); mcpReady = mcpInitialized && mcpError == 0;
+    if (mcpReady && stopOutputsPending) {
+      setAllMoles(false);
+      if (mcpReady && !Wire.getWireTimeoutFlag()) stopOutputsPending = false;
+    }
+    uint8_t mask = 0;
+    for (uint8_t id = 0; id < MOLE_COUNT; id++) {
+      int16_t x, y, z;
+      if (!(sensorConfiguredMask & (1 << id)) && wakeSensor(sensorChannel[id]) && configureAccelerometerRange(sensorChannel[id])) sensorConfiguredMask |= (1 << id);
+      if ((sensorConfiguredMask & (1 << id)) && readAccelerometer(sensorChannel[id], x, y, z)) {
+        mask |= (1 << id);
+        Serial.print("SAMPLE "); Serial.print(id); Serial.print(' '); Serial.print(x);
+        Serial.print(' '); Serial.print(y); Serial.print(' '); Serial.println(z);
+      } else { sensorConfiguredMask &= ~(1 << id); }
+      Serial.print("HARDWARE MOLE "); Serial.print(id); Serial.print(" OUTPUT ");
+      Serial.print(mcpReady ? mcp.digitalRead(solenoidOutput[id]) : -1);
+      Serial.print(" RING "); Serial.println(lights[id]->getPixelColor(0));
+      checkForHits(); // Service one-shot hit polling during the telemetry response.
+    }
+    for (uint8_t id = 0; id < PLAYER_COUNT; id++) {
+      Serial.print("HARDWARE PLAYER "); Serial.print(id); Serial.print(" COLOR "); Serial.println(playerLights.getPixelColor(id));
+      checkForHits();
+    }
+    Serial.print("HARDWARE TICKETS ACTIVE "); Serial.print(ticketPayoutActive ? 1 : 0);
+    Serial.print(" TARGET "); Serial.print(ticketTarget); Serial.print(" COUNT "); Serial.print(ticketDispensed);
+    Serial.print(" MOTOR "); Serial.println(digitalRead(TICKET_MOTOR_PIN));
+    Serial.print("HEALTH MCP "); Serial.print(mcpReady ? 1 : 0);
+    Serial.print(" SENSORS "); Serial.print(mask);
+    Serial.print(" RFID "); Serial.print(rfidReaderAvailable ? 1 : 0);
+    Serial.print(" LEASE "); Serial.println(leaseEnabled ? 1 : 0);
+    Serial.println("OK HEALTH"); return;
+  }
 
 
 
@@ -3223,7 +3297,7 @@ void handleCommand(
 
     ) {
 
-      Serial.println("ERROR BAD MOLE");
+      commandFailed = true; Serial.println("ERROR BAD MOLE");
 
       return;
 
@@ -3283,7 +3357,7 @@ void handleCommand(
 
 
 
-    Serial.println("ERROR BAD MOLE ACTION");
+    commandFailed = true; Serial.println("ERROR BAD MOLE ACTION");
 
     return;
 
@@ -3371,7 +3445,7 @@ void handleCommand(
 
     } else {
 
-      Serial.println("ERROR BAD LIGHT");
+      commandFailed = true; Serial.println("ERROR BAD LIGHT");
 
     }
 
@@ -3423,7 +3497,7 @@ void handleCommand(
 
     ) {
 
-      Serial.println("ERROR BAD LIGHT");
+      commandFailed = true; Serial.println("ERROR BAD LIGHT");
 
       return;
 
@@ -3457,7 +3531,7 @@ void handleCommand(
 
 
 
-    Serial.println("ERROR BAD LIGHT ACTION");
+    commandFailed = true; Serial.println("ERROR BAD LIGHT ACTION");
 
     return;
 
@@ -3477,7 +3551,7 @@ void handleCommand(
   if (sscanf(command.c_str(), "PLAYER_LIGHT %d %d %d %d",
       &rgbPlayer, &playerR, &playerG, &playerB) == 4) {
     if (rgbPlayer < 0 || rgbPlayer >= PLAYER_COUNT) {
-      Serial.println("ERROR BAD PLAYER");
+      commandFailed = true; Serial.println("ERROR BAD PLAYER");
       return;
     }
     setPlayerLight(rgbPlayer, playerR, playerG, playerB);
@@ -3519,7 +3593,7 @@ void handleCommand(
 
     ) {
 
-      Serial.println("ERROR BAD PLAYER");
+      commandFailed = true; Serial.println("ERROR BAD PLAYER");
 
       return;
 
@@ -3605,7 +3679,7 @@ void handleCommand(
 
 
 
-    Serial.println("ERROR BAD PLAYER LIGHT ACTION");
+    commandFailed = true; Serial.println("ERROR BAD PLAYER LIGHT ACTION");
 
     return;
 
@@ -3651,7 +3725,7 @@ void handleCommand(
 
     ) {
 
-      Serial.println("ERROR BAD TICKET COUNT");
+      commandFailed = true; Serial.println("ERROR BAD TICKET COUNT");
 
       return;
 
@@ -3659,7 +3733,7 @@ void handleCommand(
 
 
 
-    dispenseTickets(ticketCount);
+    if (!dispenseTickets(ticketCount)) commandFailed = true;
 
     return;
 
@@ -3706,7 +3780,7 @@ void handleCommand(
 
   if (command == "RFID INIT") {
     if (initializeRFIDReader()) Serial.println("OK RFID INIT");
-    else Serial.println("ERROR RFID INIT FAILED");
+    else { commandFailed = true; Serial.println("ERROR RFID INIT FAILED"); }
     return;
   }
 
@@ -3718,7 +3792,7 @@ void handleCommand(
 
 
 
-  Serial.print("ERROR UNKNOWN COMMAND ");
+  commandFailed = true; Serial.print("ERROR UNKNOWN COMMAND ");
 
   Serial.println(command);
 
@@ -3764,11 +3838,24 @@ void readSerialCommands() {
 
 
 
-      handleCommand(
-
-        commandBuffer
-
-      );
+      if (commandOverflow) { commandOverflow = false; commandBuffer = ""; Serial.println("ERROR COMMAND TOO LONG"); continue; }
+      String line = commandBuffer;
+      unsigned long commandId = 0;
+      bool tracked = line.startsWith("@");
+      if (tracked) {
+        int split = line.indexOf(' ');
+        if (split <= 1) { commandBuffer = ""; Serial.println("ERROR BAD COMMAND ID"); continue; }
+        commandId = line.substring(1, split).toInt(); line = line.substring(split + 1);
+      }
+      commandFailed = false;
+      Wire.clearWireTimeoutFlag();
+      lastControllerCommand = millis();
+      handleCommand(line);
+      if (Wire.getWireTimeoutFlag()) { commandFailed = true; reportI2CTimeoutIfNeeded(); }
+      if (tracked) {
+        Serial.print("ACK "); Serial.print(commandId);
+        Serial.println(commandFailed ? " ERROR" : " OK");
+      }
 
 
 
@@ -3788,6 +3875,7 @@ void readSerialCommands() {
 
 
 
+      if (commandOverflow) continue;
       commandBuffer +=
 
         c;
@@ -3800,12 +3888,13 @@ void readSerialCommands() {
 
         commandBuffer.length()
 
-        > 100
+        > 192
 
       ) {
 
 
 
+        commandOverflow = true;
         commandBuffer =
 
           "";
@@ -3849,6 +3938,19 @@ void setup() {
     500
 
   );
+
+  Serial.println("PROTOCOL 2");
+#ifdef __AVR__
+  Serial.print("RESET_CAUSE "); Serial.println(resetCause);
+#endif
+  Serial.print(F("FIRMWARE "));
+  Serial.print(F(MOLE_SKETCH_NAME));
+  Serial.print(' ');
+  Serial.print(F(MOLE_SKETCH_VERSION));
+  Serial.print(' ');
+  Serial.println(F(MOLE_SOURCE_SHA256));
+
+
 
 
 
@@ -3966,7 +4068,7 @@ void setup() {
 
   if (
 
-    !mcp.begin_I2C()
+    !(mcpInitialized = mcp.begin_I2C())
 
   ) {
 
@@ -4024,6 +4126,7 @@ void setup() {
 
 
 
+  mcpReady = mcpInitialized;
   reportRFIDCheckpoint("AFTER SOLENOIDS");
 
   // ----------------------------------------------------------
@@ -4207,6 +4310,9 @@ void setup() {
     "READY"
 
   );
+#ifdef __AVR__
+  wdt_enable(WDTO_2S);
+#endif
 
 }
 
@@ -4226,6 +4332,17 @@ void loop() {
 
 
 
+#ifdef __AVR__
+  wdt_reset();
+#endif
+  if (leaseEnabled && millis() - lastControllerCommand > CONTROLLER_LEASE_MS) {
+    leaseEnabled = false; hitDetectionEnabled = false; puzzleHitArmed = false;
+    ticketMotor(false); ticketPayoutActive = false;
+    stopOutputsPending = true; setAllMoles(false);
+    if (mcpReady && !Wire.getWireTimeoutFlag()) stopOutputsPending = false;
+    turnAllMoleLightsOff(); clearPlayerLights();
+    Serial.println("ERROR CONTROLLER LEASE EXPIRED SAFE STOP REQUESTED");
+  }
   loopCounter++;
 
 

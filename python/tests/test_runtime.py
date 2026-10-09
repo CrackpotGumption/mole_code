@@ -38,65 +38,49 @@ class Hardware:
 
 
 class RuntimeTests(unittest.TestCase):
-    def run_main(self, mode):
-        hardware = Hardware()
-
-        class Status:
-            def __init__(self, game, **kwargs):
-                if mode == 'bind-error':
-                    raise OSError('address in use')
-                self.game = game
-                self.stopped = False
-
+    def run_main(self, bind_error=False):
+        events = []
+        class Cabinet:
+            def __init__(self, *args):
+                events.append('cabinet-created')
             def start(self):
-                if mode == 'disconnect':
-                    hardware.running = False
-                else:
-                    signal.raise_signal(signal.SIGTERM)
-
+                events.append('hardware-start')
+                signal.raise_signal(signal.SIGTERM)
+            def tick(self):
+                pass
+            def close(self):
+                events.append('cabinet-closed')
+        class Status:
+            def __init__(self, *args, **kwargs):
+                if bind_error:
+                    raise OSError('address in use')
+            def start(self):
+                events.append('http-start')
             def stop(self):
-                self.stopped = True
-
-        services = []
-
-        def make_status(*args, **kwargs):
-            service = Status(*args, **kwargs)
-            services.append(service)
-            return service
-
+                events.append('http-stopped')
         modules = {
-            'app.hardware': types.SimpleNamespace(ArduinoController=lambda **kwargs: hardware),
-            'app.status_service': types.SimpleNamespace(StatusService=make_status),
+            'app.cabinet': types.SimpleNamespace(Cabinet=Cabinet),
+            'app.hardware': types.SimpleNamespace(ArduinoController=lambda **kwargs: None),
+            'app.status_service': types.SimpleNamespace(StatusService=Status),
         }
-        with patch.dict(sys.modules, modules), patch.dict('os.environ', {'GAME_STATE_PATH': ''}), patch('app.app.threading.Thread'), \
-                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        with patch.dict(sys.modules, modules), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             result = app.main()
-        return result, hardware, services
+        return result, events
 
-    def test_sigterm_retracts_and_drains_before_close(self):
+    def test_http_starts_before_hardware_and_sigterm_closes_services(self):
         previous = signal.getsignal(signal.SIGTERM)
-        result, hardware, services = self.run_main('signal')
+        result, events = self.run_main()
         self.assertEqual(result, 0)
-        self.assertEqual(hardware.commands[:4],
-                         ['SENSORS DISABLE', 'MOLES ALL DOWN', 'LIGHTS OFF', 'PLAYER_LIGHTS OFF'])
-        self.assertEqual(hardware.commands[-4:], hardware.commands[:4])
-        self.assertEqual(len([command for command in hardware.commands if command.startswith('LIGHT ')]), 5)
-        self.assertTrue(hardware.drained)
-        self.assertTrue(hardware.closed)
-        self.assertTrue(services[0].stopped)
+        self.assertLess(events.index('http-start'), events.index('hardware-start'))
+        self.assertIn('cabinet-closed', events)
+        self.assertIn('http-stopped', events)
         self.assertIs(signal.getsignal(signal.SIGTERM), previous)
 
-    def test_disconnection_exits_with_failure(self):
-        result, hardware, services = self.run_main('disconnect')
+    def test_http_bind_failure_closes_runtime(self):
+        result, events = self.run_main(bind_error=True)
         self.assertEqual(result, 1)
-        self.assertTrue(hardware.closed)
-        self.assertTrue(services[0].stopped)
-
-    def test_status_startup_failure_cleans_up_hardware(self):
-        result, hardware, _ = self.run_main('bind-error')
-        self.assertEqual(result, 1)
-        self.assertTrue(hardware.closed)
-        self.assertIn('MOLES ALL DOWN', hardware.commands)
+        self.assertIn('cabinet-closed', events)
+        self.assertNotIn('hardware-start', events)
 
     def test_shutdown_blocks_late_badge_and_accel_events(self):
         hardware = Hardware()

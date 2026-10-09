@@ -99,6 +99,8 @@ class AudioCues(SilentAudio):
         self.queue = queue.Queue(maxsize=8)
         self.stopped = threading.Event()
         self.process = None
+        self.last_error = None
+        self.last_cue = None
         self.process_lock = threading.Lock()
         self._generation = 0
         if self.enabled:
@@ -190,19 +192,24 @@ class AudioCues(SilentAudio):
                     with self.process_lock:
                         if self.stopped.is_set() or generation != self._generation:
                             continue
+                        self.last_cue = cue
                         self.process = subprocess.Popen(['aplay', '-q', '-D', self.device, str(path)],
-                                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                     try:
-                        result = self.process.wait(timeout=(seconds or 5) + 5)
+                        _, stderr = self.process.communicate(timeout=(seconds or 5) + 5)
+                        result = self.process.returncode
                         if result and generation == self._generation and not self.stopped.is_set():
-                            print(f'Audio playback failed: {cue}; check AUDIO_DEVICE.')
+                            self.last_error = f'Audio playback failed: {cue}: {stderr.decode(errors="replace")[-4096:]}'
+                            print(self.last_error)
                     except subprocess.TimeoutExpired:
+                        self.last_error = f"Audio playback timed out: {cue}"
                         self.process.kill()
-                        self.process.wait()
+                        self.process.communicate()
                     finally:
                         with self.process_lock:
                             self.process = None
             except Exception as error:
+                self.last_error = str(error)
                 print(f'AUDIO ERROR: {error}')
             finally:
                 self.queue.task_done()
@@ -214,3 +221,13 @@ class AudioCues(SilentAudio):
                 self.process.terminate()
         if self.enabled:
             self.worker.join(timeout=2)
+
+
+    def get_diagnostics(self):
+        with self.process_lock:
+            return {'enabled': self.enabled, 'device': self.device,
+                    'queue_depth': self.queue.qsize(), 'last_cue': self.last_cue,
+                    'last_error': self.last_error,
+                    'playing': self.process is not None and self.process.poll() is None,
+                    'worker_alive': self.worker.is_alive() if self.enabled else False,
+                    'available_cues': sorted(path.stem for path in self.directory.glob('*.wav'))}

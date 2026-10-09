@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from app.app import keyboard_rfid_loop
 from app.mole_game import MoleGame, MOLE_ID_BY_NAME, RGB
-from app.progress_store import ProgressStore
+import json
 from test_runtime import Hardware
 
 
@@ -23,7 +23,7 @@ class IdleRainbowTests(unittest.TestCase):
 
     def test_idle_animates_then_badge_uses_puzzle_colors(self):
         with patch('app.mole_game.time.monotonic', return_value=100):
-            self.game.restore_hardware()
+            self.game.initialize_hardware()
         first = self.hardware.commands[-5:]
         self.assertTrue(all(command.startswith('LIGHT ') for command in first))
         self.assertNotIn('MOLES ALL UP', self.hardware.commands)
@@ -56,15 +56,15 @@ class IdleRainbowTests(unittest.TestCase):
         self.assertEqual(self.game.state.completed_players, {'001'})
         self.assertEqual(self.game.state.status, 'WAITING FOR BADGE')
 
-    def test_completed_recovery_keeps_green_indicators_and_idle_rainbows(self):
+    def test_old_progress_is_ignored_and_starts_base_indicators(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'progress.json'
-            ProgressStore(path, ('001', '002', '003', '004', '005', '006')).save({'001', '002'}, False)
+            path.write_text(json.dumps({'version': 1, 'completed_players': ['001', '002'], 'ticket_requested': False}))
             game = MoleGame(self.hardware, state_path=path)
-            game.restore_hardware()
-        self.assertIn('PLAYER_LIGHT 0 GREEN', self.hardware.commands)
-        self.assertIn('PLAYER_LIGHT 1 GREEN', self.hardware.commands)
-        self.assertTrue(all(command.startswith('LIGHT ') for command in self.hardware.commands[-5:]))
+            game.initialize_hardware()
+        self.assertNotIn('PLAYER_LIGHT 0 GREEN', self.hardware.commands)
+        self.assertEqual(game.state.completed_players, set())
+        self.assertIn('PLAYER_LIGHTS OFF', self.hardware.commands)
 
     def test_idle_after_final_victory_does_not_reset_completions(self):
         self.game.state.completed_players = {'001', '002', '003', '004', '005', '006'}

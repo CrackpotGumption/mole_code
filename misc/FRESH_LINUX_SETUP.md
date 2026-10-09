@@ -38,8 +38,10 @@ a complete system reset.
 ## Install Linux, clone, run two scripts
 
 During Linux installation, create a normal administrator account with a password
-and connect the machine to your cabinet LAN. Connect the Arduino with the current
-`MOLE_FINAL_NO_INTERVAL_v2` firmware already flashed. The setup scripts do not flash it.
+and connect the machine to your cabinet LAN. Connect the Arduino Mega with a working USB bootloader and a cabinet sketch
+that prints `READY`. The current Docker controller checks its firmware identity
+and automatically uploads the bundled sketch when it differs. An unresponsive
+board requires manual diagnosis rather than a blind upload.
 Configure BIOS/UEFI to power on after AC power returns.
 
 Run these commands from that administrator account:
@@ -54,12 +56,14 @@ sudo bash misc/linux_bash_daemon
 ```
 
 The first script updates Linux, installs Docker, OpenSSH and supporting tools,
-enables SSH and Docker at boot, grants the invoking account sudo access, disables
+enables SSH, Docker and Avahi hostname discovery at boot, grants the invoking account sudo access, disables
 sleep, and creates `/etc/mole-cabinet/cabinet.conf` if it does not exist. Existing
 configuration is preserved. If running directly as root, explicitly select an
 existing normal account with `bash misc/linux_setup --admin-user YOUR_USER`.
 
-The second script installs and immediately starts the boot service. Defaults use
+The second script installs and immediately starts the boot service. Keep
+`misc/collect_host_info.py` and `misc/host_agent.py` beside it; the installer uses that file to report host
+versions and machine identity through `/diagnostics`. Defaults use
 `myst1cus/mole-game:latest`, automatically select the only connected USB serial
 device, publish status on port 8080, and store progress in `mole-game-data`.
 No configuration editing is needed for a cabinet with one Arduino and a public
@@ -87,8 +91,7 @@ sudo reboot
 
 After reboot, verify the status endpoint and test physical badge reads, hits,
 movement, lights, audio and payout. The current payout is seven tickets, with a
-two-second-per-ticket firmware timeout (14 seconds total). Upload the updated
-Arduino sketch to apply that timeout.
+two-second-per-ticket firmware timeout (14 seconds total). The current Docker image automatically synchronizes the Mega firmware at startup.
 
 ## Remote administration
 
@@ -129,12 +132,33 @@ Run updates when no players are using the cabinet.
 
 Open `http://CABINET_LAN_IP:8080/state` from the LAN, or
 `http://localhost:8080/state` on the cabinet. `/health` is also available.
-These endpoints return JSON. Existing firewall rules may need TCP 8080 allowed;
+The cabinet also advertises its hostname using mDNS: a machine named `mole4`
+is available as `http://mole4.local:8080/state` and
+`http://mole4.local:8080/health`. SSH can use `ssh YOUR_USER@mole4.local`.
+Give each cabinet a unique hostname during installation. To change an existing
+cabinet name, run `sudo hostnamectl set-hostname mole4`, update the old hostname's
+entry in `/etc/hosts` if present, then reboot. Local discovery requires a client
+that supports mDNS and a LAN that allows multicast UDP 5353; it does not normally
+cross VLANs or guest-network isolation. An active firewall may need an mDNS rule.
+Bare names such as `mole4` require router/local DNS support; use `mole4.local`
+for discovery provided by these scripts.
+The `/diagnostics` endpoint reports software/firmware versions, host information,
+connection/error details, and game/solve state. Host facts are a launch-time
+snapshot. These endpoints return JSON. Existing firewall rules may need TCP 8080 allowed;
 Docker-published ports have their own firewall behavior. Keep SSH and the
 unauthenticated status API on the trusted cabinet network.
 
 Test rebooting without internet while retaining the LAN. Allow about a minute
 for the bounded image-pull attempt plus startup. Keep the cached Docker image
-and the `mole-game-data` volume. Completed players survive reboot; an unfinished
-player rescans their badge and restarts their puzzle. A completed full game stays
-completed until its checkpoint is deliberately cleared for a new group.
+and the `mole-game-data` volume. Every cabinet restart starts a new game: no completed players, active puzzle,
+payout or maintenance state is restored. The volume retains observational game
+logs and machine settings/firmware history. Administrators can inspect
+`/game/events` and explicitly restore through the API when needed.
+
+## API administration
+
+The installer enables `mole-host-agent.service`. No API token or authentication
+header is required; router/LAN access controls who can administer the cabinet.
+The API exposes host diagnostics/logs, serial receipts, maintenance/recovery,
+game reset/restore, configuration, firmware retry, updates and host power controls.
+See [API guide](API.md) for requests. Hardware changes require maintenance mode.
