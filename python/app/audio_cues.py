@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import queue
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -113,6 +114,18 @@ def category_mix(paths, seconds, rng=None, voices=None):
     return output.tobytes()
 
 
+def amplify_samples(samples, percent):
+    gain = float(percent) / 100
+    clipped = 0
+    output = array.array('h')
+    for sample in samples:
+        scaled = round(sample * gain)
+        if scaled < -32768 or scaled > 32767:
+            clipped += 1
+        output.append(max(-32768, min(32767, scaled)))
+    return output, clipped
+
+
 def select_audio_device(requested, root=Path('/proc/asound')):
     """Use ALSA card names so USB selection survives card-number changes."""
     cards = []
@@ -123,15 +136,65 @@ def select_audio_device(requested, root=Path('/proc/asound')):
                               'usb_id': (path / 'usbid').read_text().strip()})
         except OSError:
             continue
+    # Docker may omit /proc/asound even while /dev/snd supports ALSA queries.
+    if not cards:
+        try:
+            listing = subprocess.run(['aplay', '-l'], capture_output=True, text=True, timeout=5)
+            seen = set()
+            for line in listing.stdout.splitlines():
+                match = re.match(r'card (\d+): (\S+) \[.*?\], device (\d+):', line)
+                if not match:
+                    continue
+                number, identity, device = match.groups()
+                if identity in seen:
+                    continue
+                info = subprocess.run(['amixer', '-c', identity, 'info'], capture_output=True, text=True, timeout=5)
+                sys_path = Path('/sys/class/sound') / f'card{number}' / 'device'
+                usb = ('usb' in (line + info.stdout).lower()
+                       or any(re.fullmatch(r'usb\d+', part) for part in sys_path.resolve().parts))
+                if usb:
+                    cards.append({'id': identity, 'usb_id': None, 'device': int(device), 'discovery': 'ALSA'})
+                    seen.add(identity)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
     if requested not in ('default', 'usb'):
         return requested, cards, None
     if len(cards) == 1:
-        return f"plughw:CARD={cards[0]['id']},DEV=0", cards, None
+        return f"plughw:CARD={cards[0]['id']},DEV={cards[0].get('device', 0)}", cards, None
     if cards:
         return requested, cards, 'Multiple USB audio cards; configure AUDIO_DEVICE with a specific ALSA card ID'
-    if requested == 'usb':
-        return requested, cards, 'No USB audio card detected'
-    return 'default', cards, None
+    return requested, cards, 'No USB audio card detected; built-in output will not be selected'
+
+
+def maximize_usb_volume(device, cards):
+    """Unmute/max only playback controls on the selected USB sound card."""
+    card = next((item['id'] for item in cards if f"CARD={item['id']}," in device), None)
+    report = {'card': card, 'target_percent': 100, 'controls': [], 'status': 'NOT_USB'}
+    if card is None:
+        return report
+    try:
+        def mixer(*args):
+            result = subprocess.run(['amixer', '-c', card, *args], capture_output=True, text=True, timeout=5)
+            if result.returncode:
+                raise RuntimeError(result.stderr.strip() or 'amixer failed')
+            return result.stdout
+        controls = mixer('scontrols')
+        for name, index in re.findall(r"Simple mixer control '(.+)',(\d+)", controls):
+            identity = f'{name},{index}'
+            before = mixer('sget', identity)
+            capabilities = next((line for line in before.splitlines() if 'Capabilities:' in line), '')
+            settings = []
+            if 'pvolume' in capabilities:
+                settings.append('100%')
+            if 'pswitch' in capabilities:
+                settings.append('unmute')
+            if settings:
+                after = mixer('sset', identity, *settings)
+                report['controls'].append({'name': name, 'index': int(index), 'readback': after})
+        report['status'] = 'APPLIED' if report['controls'] else 'NO_PLAYBACK_CONTROLS'
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+        report.update(status='ERROR', error=str(error))
+    return report
 
 
 class AudioCues(SilentAudio):
@@ -140,7 +203,9 @@ class AudioCues(SilentAudio):
         packaged = Path(__file__).parent / 'fx'
         self.fx_directory = Path(os.environ.get('FX_DIR', packaged if packaged.exists() else Path(__file__).resolve().parents[2] / 'fx'))
         self.last_files = []
-        self.requested_device = os.environ.get('AUDIO_DEVICE', 'default')
+        self.volume_percent = float(os.environ.get('AUDIO_VOLUME_PERCENT', '100'))
+        self.last_clipped_samples = 0
+        self.requested_device = os.environ.get('AUDIO_DEVICE', 'usb')
         self.device, self.usb_cards, device_error = select_audio_device(self.requested_device)
         self.enabled = os.environ.get('AUDIO_ENABLED', '1') != '0' and shutil.which('aplay') is not None
         self.queue = queue.Queue(maxsize=8)
@@ -150,6 +215,7 @@ class AudioCues(SilentAudio):
         if device_error:
             self.enabled = False
             print(f'AUDIO ERROR: {device_error}')
+        self.mixer = maximize_usb_volume(self.device, self.usb_cards) if self.enabled else {'status': 'DISABLED'}
         self.last_cue = None
         self.process_lock = threading.Lock()
         self._generation = 0
@@ -165,6 +231,10 @@ class AudioCues(SilentAudio):
                 self.queue.put_nowait(item)
             except queue.Full:
                 pass
+
+    def maximize_volume(self):
+        self.mixer = maximize_usb_volume(self.device, self.usb_cards)
+        return self.mixer
 
     def category_files(self, category):
         root = getattr(self, 'fx_directory', None)
@@ -306,7 +376,16 @@ class AudioCues(SilentAudio):
                         with wave.open(str(path), 'wb') as target:
                             target.setparams((1, 2, SAMPLE_RATE, 0, 'NONE', 'not compressed'))
                             target.writeframes(custom)
-                    duration = len(read_samples(path)) / SAMPLE_RATE
+                    source_samples = read_samples(path)
+                    duration = len(source_samples) / SAMPLE_RATE
+                    gained, self.last_clipped_samples = amplify_samples(source_samples, self.volume_percent)
+                    if self.volume_percent != 100:
+                        path = Path(folder) / 'volume.wav'
+                        if sys.byteorder != 'little':
+                            gained.byteswap()
+                        with wave.open(str(path), 'wb') as target:
+                            target.setparams((1, 2, SAMPLE_RATE, 0, 'NONE', 'not compressed'))
+                            target.writeframes(gained.tobytes())
                     with self.process_lock:
                         if self.stopped.is_set() or generation != self._generation:
                             continue
@@ -344,7 +423,8 @@ class AudioCues(SilentAudio):
     def get_diagnostics(self):
         with self.process_lock:
             return {'enabled': self.enabled, 'device': self.device,
-                    'requested_device': self.requested_device, 'usb_cards': self.usb_cards,
+                    'requested_device': self.requested_device, 'usb_cards': self.usb_cards, 'mixer': self.mixer,
+                    'volume_percent': self.volume_percent, 'last_clipped_samples': self.last_clipped_samples,
                     'queue_depth': self.queue.qsize(), 'last_cue': self.last_cue,
                     'last_error': self.last_error,
                     'playing': self.process is not None and self.process.poll() is None,

@@ -76,3 +76,25 @@ JSON object validation, cross-origin rejection, and base URL validation.
 
 Client workflow tests exercise serial session polling, two-stage host completion,
 uncertain transport failures without POST retries, and asynchronous rejection.
+
+## Audio administration
+
+Open a cabinet, then Audio. Status refreshes at the selected state interval while
+that tab is open. It shows requested/resolved ALSA devices, detected USB cards,
+playback/worker/queue state, last cue/files/error, category filenames, and raw
+fields. Errors can be retained after successful playback.
+
+Enter maintenance and wait for DONE, then select a discovered cue or STOP.
+Audio operation DONE means dispatched, not finished or audible. Inspect playing
+and last_error afterward. mole_hit/victory interrupt; cheer queues; laugh is a
+failure category, not a POST cue.
+
+Choose automatic default, required USB, a detected USB card, or an explicit ALSA
+device. Save persists AUDIO_ENABLED/AUDIO_DEVICE; apply through Resume or Recover.
+Resume starts fresh unless an administrator stages a manual restore. Uploads, category-file selection, and full gameplay audio sequences are not API
+controls.
+
+Volume (application 3.2.9+) accepts 0–400% through POST /audio in maintenance.
+It persists and applies to the next cue without reconnecting. Above 100% boosts
+samples; inspect last_clipped_samples for potential distortion. The hardware
+mixer remains at maximum.

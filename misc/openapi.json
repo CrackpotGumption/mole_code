@@ -974,12 +974,26 @@
                 "properties": {
                   "cue": {
                     "type": "string"
+                  },
+                  "volume_percent": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 400
                   }
                 },
-                "required": [
-                  "cue"
+                "anyOf": [
+                  {
+                    "required": [
+                      "cue"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "volume_percent"
+                    ]
+                  }
                 ],
-                "additionalProperties": true
+                "description": "Maintenance required. volume_percent sets persistent gain; otherwise cue plays or STOP/MAX_VOLUME control playback/mixer."
               },
               "example": {
                 "cue": "STOP"
@@ -2717,6 +2731,19 @@
                 }
               }
             }
+          },
+          "mixer": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "volume_percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 400
+          },
+          "last_clipped_samples": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "additionalProperties": true
@@ -3047,6 +3074,11 @@
           "AUDIO_DEVICE": {
             "type": "string",
             "maxLength": 128
+          },
+          "AUDIO_VOLUME_PERCENT": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 400
           }
         },
         "additionalProperties": false

@@ -137,7 +137,7 @@ launch_game() {
         --env "LOG_RAW_ACCEL=${LOG_RAW_ACCEL:-0}" \
         --env "LOG_HEARTBEAT=${LOG_HEARTBEAT:-0}" \
         --env "LOG_RAINBOW_COMMANDS=${LOG_RAINBOW_COMMANDS:-0}" \
-        --env "AUDIO_DEVICE=${AUDIO_DEVICE:-default}" \
+        --env "AUDIO_DEVICE=${AUDIO_DEVICE:-usb}" \
         --env "AUDIO_ENABLED=${AUDIO_ENABLED:-1}" \
         "${audio_args[@]}" \
         --mount type=bind,source=/run/mole-host-agent,target=/run/mole-host-agent,readonly \

@@ -201,7 +201,7 @@ POST `/configuration` merges `settings` with existing overrides, persists settin
 | VICTORY_SECONDS | Number 0–120 | 45 |
 | IDLE_FRAME_SECONDS | Number 0.5–60 | 2 |
 | AUDIO_ENABLED | Integer 0/1 or string "0"/"1" | 1 |
-| AUDIO_DEVICE | String ≤128 characters, no control characters | default |
+| AUDIO_DEVICE | String ≤128 characters, no control characters | usb |
 | LOG_RAW_ACCEL | 0/1 or string equivalent | 0 |
 | LOG_HEARTBEAT | 0/1 or string equivalent | 0 |
 | LOG_RAINBOW_COMMANDS | 0/1 or string equivalent | 0 |
@@ -321,4 +321,8 @@ Docker builds normalize copies from repository `fx/hit`, `fx/laugh`, `fx/cheer` 
 
 GET `/audio` adds `categories` (category → filenames) and `last_files` (selected playback paths). POST `/audio` accepts `mole_hit`, `cheer`, `victory`, plus discovered legacy cue names. Testing cues requires maintenance. `last_cue` can be an internal asset path or mix identifier. Missing category assets fall back to existing placeholders. Local Python runs must point `FX_DIR` at normalized assets (generate with `python tools/prepare_audio.py fx /tmp/mole-fx` using ffmpeg); Docker handles conversion automatically.
 
-USB audio routing: `AUDIO_DEVICE=default` automatically prefers a single USB ALSA card, falling back to ALSA default only if none is detected. `AUDIO_DEVICE=usb` requires USB and disables playback with a diagnostic error if none is present. Multiple USB cards require explicit selection, e.g. `plughw:CARD=DeviceID,DEV=0`, discovered from `/audio.usb_cards`. `/audio.requested_device` shows configured routing; `/audio.device` shows selected routing. Settings changes apply on resume/recover.
+USB audio routing: `AUDIO_DEVICE=usb` is the default. Legacy `AUDIO_DEVICE=default` also resolves to the single USB ALSA card; it does not fall back to built-in audio when USB is absent. `AUDIO_DEVICE=usb` requires USB and disables playback with a diagnostic error if none is present. Multiple USB cards require explicit selection, e.g. `plughw:CARD=DeviceID,DEV=0`, discovered from `/audio.usb_cards`. `/audio.requested_device` shows configured routing; `/audio.device` shows selected routing. Settings changes apply on resume/recover.
+
+USB playback volume is set to 100% and unmuted on the selected USB card at startup. `/audio.mixer` reports card, target_percent, controls/readback, status (APPLIED, NO_PLAYBACK_CONTROLS, NOT_USB, DISABLED, ERROR), and optional error. POST `/audio` with `{"cue":"MAX_VOLUME"}` in maintenance reapplies it. Speaker controls not exposed through ALSA cannot be changed this way.
+
+Adjustable playback gain (3.2.9): POST `/audio` `{"volume_percent":200}` in maintenance, or POST `/configuration` `{"settings":{"AUDIO_VOLUME_PERCENT":200}}`. Range 0–400, default 100. Setting persists and applies to the next cue without reconnect. 0 mutes samples, 100 preserves source amplitude, 200 doubles amplitude. USB hardware mixer stays at 100%. GET `/audio.volume_percent` reports gain and `last_clipped_samples` reports saturation during the last rendered cue. Digital boost cannot increase the speaker amplifier's physical output limit; clipping can distort. Volume requests do not play a cue; test with a separate cue request.

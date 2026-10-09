@@ -174,3 +174,15 @@ class CabinetTests(unittest.TestCase):
         commands = [r['command'] for r in self.controller.records]
         lease_index = commands.index('LEASE ON')
         self.assertEqual(commands[lease_index + 1], 'HEALTH')
+
+    def test_audio_volume_is_persisted_applied_live_and_validated(self):
+        self.connect()
+        self.cabinet._act('maintenance', {})
+        self.cabinet._act('audio', {'volume_percent': 200})
+        self.assertEqual(self.cabinet.audio.volume_percent, 200)
+        self.assertEqual(self.cabinet.configuration()['AUDIO_VOLUME_PERCENT'], '200')
+        saved = json.loads((self.root / 'runtime-settings.json').read_text())
+        self.assertEqual(saved['AUDIO_VOLUME_PERCENT'], 200)
+        for value in (-1, 401, True, float('nan')):
+            with self.assertRaises(ValueError):
+                self.cabinet._act('audio', {'volume_percent': value})

@@ -42,7 +42,7 @@ class Cabinet:
             self.fault = {'message': f'Invalid saved configuration: {error}', 'timestamp': time.time()}
             self.phase = 'FAULT'
     def _apply_settings(self, settings):
-        fields = {'FAILURE_SECONDS': (0, 120), 'VICTORY_SECONDS': (0, 120), 'IDLE_FRAME_SECONDS': (0.5, 60)}
+        fields = {'AUDIO_VOLUME_PERCENT': (0, 400), 'FAILURE_SECONDS': (0, 120), 'VICTORY_SECONDS': (0, 120), 'IDLE_FRAME_SECONDS': (0.5, 60)}
         for name, value in settings.items():
             if name in fields:
                 if isinstance(value, bool) or not fields[name][0] <= float(value) <= fields[name][1]:
@@ -60,8 +60,8 @@ class Cabinet:
 
     def configuration(self):
         names = ('FAILURE_SECONDS', 'VICTORY_SECONDS', 'IDLE_FRAME_SECONDS', 'AUDIO_ENABLED', 'AUDIO_DEVICE',
-                 'LOG_RAW_ACCEL', 'LOG_HEARTBEAT', 'LOG_RAINBOW_COMMANDS', 'FIRMWARE_AUTO_FLASH')
-        defaults = ('15', '45', '2', '1', 'default', '0', '0', '0', '1')
+                 'LOG_RAW_ACCEL', 'LOG_HEARTBEAT', 'LOG_RAINBOW_COMMANDS', 'FIRMWARE_AUTO_FLASH', 'AUDIO_VOLUME_PERCENT')
+        defaults = ('15', '45', '2', '1', 'usb', '0', '0', '0', '1', '100')
         return {name: os.environ.get(name, default) for name, default in zip(names, defaults)}
 
     def start(self):
@@ -238,6 +238,8 @@ class Cabinet:
             self._apply_settings(candidate)
             write(self.state_directory / 'runtime-settings.json', candidate)
             self.settings = candidate
+            if self.audio and 'AUDIO_VOLUME_PERCENT' in settings:
+                self.audio.volume_percent = float(settings['AUDIO_VOLUME_PERCENT'])
             return self.configuration()
         if action == 'firmware_retry':
             if payload.get('confirm') != 'FLASH MEGA':
@@ -245,10 +247,17 @@ class Cabinet:
             write(history_path(), {})
             return self._connect(force_flash=True)
         if action == 'audio':
+            if 'volume_percent' in payload:
+                self._act('configure', {'settings': {'AUDIO_VOLUME_PERCENT': payload['volume_percent']}})
+                return self.audio.get_diagnostics() if self.audio else {'enabled': False, 'volume_percent': float(payload['volume_percent'])}
             if not self.audio or not self.audio.enabled:
                 raise ValueError('Audio is disabled or unavailable')
             cue = payload.get('cue')
-            if cue == 'STOP':
+            if cue == 'MAX_VOLUME':
+                result = self.audio.maximize_volume()
+                if result['status'] == 'ERROR':
+                    raise RuntimeError(result['error'])
+            elif cue == 'STOP':
                 self.audio.stop_show()
             elif cue in self.audio.get_diagnostics()['available_cues']:
                 self.audio.play(cue)

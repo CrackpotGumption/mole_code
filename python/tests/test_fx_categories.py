@@ -67,3 +67,23 @@ class FxCategoryTests(unittest.TestCase):
             (other / 'id').write_text('OtherUSB')
             (other / 'usbid').write_text('9876:5432')
             self.assertIn('Multiple USB', select_audio_device('usb', root)[2])
+
+    def test_alsa_usb_fallback_when_proc_asound_is_missing(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            listing = Mock(stdout='card 0: PCH [HDA Intel PCH], device 0: Analog [Analog]\ncard 1: AUDIO [USB  AUDIO], device 0: USB Audio [USB Audio]\n')
+            info = Mock(stdout="Mixer name: 'USB Mixer'")
+            with patch('app.audio_cues.subprocess.run', side_effect=[listing, Mock(stdout="Mixer name: 'Realtek'"), info]):
+                device, cards, error = select_audio_device('usb', Path(folder))
+            self.assertEqual(device, 'plughw:CARD=AUDIO,DEV=0')
+            self.assertEqual(cards[0]['discovery'], 'ALSA')
+            self.assertIsNone(error)
+
+    def test_legacy_default_does_not_fall_back_to_builtin_speaker(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            listing = Mock(stdout='card 0: PCH [HDA Intel PCH], device 0: Analog [Analog]\n')
+            with patch('app.audio_cues.subprocess.run', side_effect=[listing, Mock(stdout="Realtek")]):
+                _, cards, error = select_audio_device('default', Path(folder))
+            self.assertEqual(cards, [])
+            self.assertIn('No USB audio', error)

@@ -51,5 +51,11 @@ async function scenario(path, body, responses) {
   ]);
   assert.match(rejection.message,/Not in maintenance/);
   assert.doesNotMatch(rejection.message,/completed/);
-  console.log('4 client workflow tests passed');
+  const audio = await scenario('/audio',{cue:'cheer'},[accepted({id:'audio-op'}),ok({status:'DONE',result:{playing:true}})]);
+  assert.match(audio.message,/dispatched; verify playback/);
+  assert.doesNotMatch(audio.message,/completed/);
+  const volume = await scenario('/audio',{volume_percent:200},[accepted({id:'volume-op'}),ok({status:'DONE'})]);
+  assert.equal(volume.calls[0].payload.volume_percent,200);
+  assert.match(volume.message,/volume saved; applies to next cue/);
+  console.log('6 client workflow tests passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
