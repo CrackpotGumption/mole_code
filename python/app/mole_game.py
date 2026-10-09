@@ -197,11 +197,11 @@ EXPECTED_ORDERS = {
 #
 # Arduino logical mole IDs:
 #
-# 0 = Back left
-# 1 = Back right
-# 2 = Front left
-# 3 = Front center
-# 4 = Front right
+# 0 = Front left
+# 1 = Front center
+# 2 = Front right
+# 3 = Back left
+# 4 = Back right
 # ============================================================
 
 MOLE_BY_ID = {
@@ -311,7 +311,7 @@ class MoleGame:
     HIT_Z_THRESHOLD = -9000
     HIT_RELEASE_Z = -6400
     HIT_COOLDOWN = 0.300
-    SENSOR_CHANNELS = {0: 1, 1: 0, 2: 2, 3: 4, 4: 7}
+    SENSOR_CHANNELS = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4}
 
     def __init__(
         self,
@@ -320,6 +320,7 @@ class MoleGame:
         audio=None,
         failure_seconds=15.0,
         victory_seconds=45.0,
+        idle_frame_seconds=2.0,
         stop_requested=None,
     ):
 
@@ -327,6 +328,9 @@ class MoleGame:
         self.audio = audio or SilentAudio()
         self.stop_requested = stop_requested or (lambda: False)
         self.failure_seconds = float(failure_seconds)
+        self.idle_frame_seconds = float(idle_frame_seconds)
+        if not 0.5 <= self.idle_frame_seconds <= 60:
+            raise ValueError("IDLE_FRAME_SECONDS must be between 0.5 and 60")
         self.victory_seconds = float(victory_seconds)
         if not 0 <= self.victory_seconds <= 120:
             raise ValueError("VICTORY_SECONDS must be between 0 and 120")
@@ -339,6 +343,7 @@ class MoleGame:
         self._accept_samples_after = float("inf")
         self._hit_latched = set()
         self._last_hit = {}
+        self._next_idle_frame = 0.0
         self.persistence_error = None
         self._progress_store = ProgressStore(state_path, PLAYER_IDS) if state_path else None
         if self._progress_store is not None:
@@ -370,7 +375,32 @@ class MoleGame:
             self.arduino.wait_until_idle()
             if self.state.completed_players == set(PLAYER_IDS):
                 self.complete_full_game()
+            self.tick_idle()
 
+
+
+    def tick_idle(self):
+        """Animate idle mole rings without blocking badge handling or shows."""
+        if not self._event_lock.acquire(blocking=False):
+            return
+        try:
+            if (self._stopping or self.stop_requested() or self.persistence_error is not None
+                    or self.state.active_player is not None
+                    or self.state.status not in ("WAITING FOR BADGE", "GAME COMPLETE")):
+                return
+            now = time.monotonic()
+            if now < self._next_idle_frame:
+                return
+            commands = getattr(self.arduino, "command_queue", None)
+            if commands is not None and commands.unfinished_tasks:
+                return
+            for mole in range(5):
+                rgb = colorsys.hsv_to_rgb((now / 30 + mole / 5) % 1, 1, 1)
+                r, g, b = (int(channel * 255) for channel in rgb)
+                self.arduino.send(f"LIGHT {mole} {r} {g} {b}", quiet=True)
+            self._next_idle_frame = now + self.idle_frame_seconds
+        finally:
+            self._event_lock.release()
 
 
     # ========================================================
@@ -870,11 +900,7 @@ class MoleGame:
             )
 
 
-        # Python filters raw accelerometer samples; firmware has no settle timer.
-
-        self.arduino.send(
-            "SENSORS ENABLE"
-        )
+        # _resume_hit_detection arms one firmware HIT after setup drains.
 
 
     # ========================================================
@@ -1080,7 +1106,6 @@ class MoleGame:
         # Continue puzzle
         # ----------------------------------------------------
 
-        self.arduino.send("SENSORS ENABLE")
         self._resume_hit_detection()
         self.state.locked = False
         self.state.status = "PLAYING"
@@ -1215,6 +1240,7 @@ class MoleGame:
             self.audio.play_failure(seconds)
         deadline = time.monotonic() + seconds
         next_motion = time.monotonic()
+        motion_interval = 0.5 if victory else 1.0
         next_rainbow = next_motion
         raised, raised_at, latched, last_hit = set(), {}, set(), {}
         pending = {}
@@ -1244,29 +1270,31 @@ class MoleGame:
                     r, g, b = random.choice(tuple(RGB.values()))
                     self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
                 if ready:
-                    next_motion = now + 0.5
+                    next_motion = now + motion_interval
                 if now >= next_motion and not pending:
-                    selected = set(random.sample(range(5), random.randint(1, 3)))
+                    selected = set(random.sample(range(5), random.randint(1, 3 if victory else 2)))
                     for mole in sorted(raised - selected):
                         self.arduino.send(f"MOLE {mole} DOWN")
+                        if not victory:
+                            self.arduino.send(f"LIGHT {mole} OFF")
                     for mole in sorted(selected - raised):
                         raised_at[mole] = time.monotonic()
                         self.arduino.send(f"MOLE {mole} UP")
                     raised = selected
                     if not victory:
-                        for mole in range(5):
+                        for mole in sorted(raised):
                             r, g, b = random.choice(tuple(RGB.values()))
                             self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
-                    next_motion = now + 0.5
+                    next_motion = now + motion_interval
                 if victory and now >= next_rainbow:
                     for mole in range(5):
                         rgb = colorsys.hsv_to_rgb((now / 3 + mole / 5) % 1, 1, 1)
                         r, g, b = (int(channel * 255) for channel in rgb)
-                        self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
+                        self.arduino.send(f"LIGHT {mole} {r} {g} {b}", quiet=True)
                     for player in range(6):
                         rgb = colorsys.hsv_to_rgb((now / 3 + player / 6) % 1, 1, 1)
                         r, g, b = (int(channel * 255) for channel in rgb)
-                        self.arduino.send(f"PLAYER_LIGHT {player} {r} {g} {b}")
+                        self.arduino.send(f"PLAYER_LIGHT {player} {r} {g} {b}", quiet=True)
                     next_rainbow = now + 0.5
                 self.arduino.wait_until_idle()
                 time.sleep(max(0, min(0.02, deadline - time.monotonic())))
@@ -1490,7 +1518,11 @@ class MoleGame:
     def _resume_hit_detection(self):
         # ACKs are read on a separate thread, so waiting here is safe.
         self.arduino.wait_until_idle()
+        # Capture the cutoff before arming, so a strike received immediately
+        # after the ACK isn't dropped once firmware has consumed its one hit.
         self._accept_samples_after = time.monotonic()
+        self.arduino.send("SENSORS PUZZLE")
+        self.arduino.wait_until_idle()
 
     def handle_accel(self, mole_id, sensor_channel, x, y, z, received_at=None):
         sample_time = time.monotonic() if received_at is None else received_at
@@ -1640,6 +1672,8 @@ class MoleGame:
                 return
 
 
+            if self.SENSOR_CHANNELS.get(mole_id) != sensor_channel or strength < abs(self.HIT_Z_THRESHOLD):
+                return
             self.handle_hit(
                 mole_id,
                 sensor_channel,

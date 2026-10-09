@@ -78,6 +78,10 @@ launch_game() {
         --env GAME_STATE_PATH=/data/progress.json \
         --env "FAILURE_SECONDS=${FAILURE_SECONDS:-15}" \
         --env "VICTORY_SECONDS=${VICTORY_SECONDS:-45}" \
+        --env "IDLE_FRAME_SECONDS=${IDLE_FRAME_SECONDS:-2}" \
+        --env "LOG_RAW_ACCEL=${LOG_RAW_ACCEL:-0}" \
+        --env "LOG_HEARTBEAT=${LOG_HEARTBEAT:-0}" \
+        --env "LOG_RAINBOW_COMMANDS=${LOG_RAINBOW_COMMANDS:-0}" \
         --env "AUDIO_DEVICE=${AUDIO_DEVICE:-default}" \
         --env "AUDIO_ENABLED=${AUDIO_ENABLED:-1}" \
         "${audio_args[@]}" \

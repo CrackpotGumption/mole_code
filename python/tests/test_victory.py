@@ -28,15 +28,15 @@ class VictoryTests(unittest.TestCase):
         timing = []
         original = self.hardware.send
 
-        def send(command):
+        def send(command, **kwargs):
             original(command)
             timing.append((clock.now, command))
             if command == 'TICKET 8':
                 captured.extend([('TICKET_START 8', clock.now),
                                  ('TICKET_COUNT 8', clock.now), ('TICKET_DONE 8', clock.now)])
             if command == 'MOLE 0 UP':
-                captured.extend([('ACCEL 0 1 0 0 -12000', clock.now + 0.01),
-                                 ('ACCEL 0 1 0 0 -13000', clock.now + 0.015)])
+                captured.extend([('ACCEL 0 0 0 0 -12000', clock.now + 0.01),
+                                 ('ACCEL 0 0 0 0 -13000', clock.now + 0.015)])
 
         def samples():
             result = list(captured)

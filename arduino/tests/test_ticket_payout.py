@@ -7,10 +7,15 @@ import unittest
 
 class TicketPayoutTests(unittest.TestCase):
     def test_nonblocking_counter_timeout_and_busy(self):
-        source = (Path(__file__).resolve().parents[1] / 'MOLE_FINAL_NO_INTERVAL_v1'
-                  / 'MOLE_FINAL_NO_INTERVAL_v1.ino').read_text()
+        for version in ('v1', 'v2'):
+            with self.subTest(version=version):
+                self.check_payout(version)
+
+    def check_payout(self, version):
+        folder = f'MOLE_FINAL_NO_INTERVAL_{version}'
+        source = (Path(__file__).resolve().parents[1] / folder / f'{folder}.ino').read_text()
         block = source[source.index('// Nonblocking ticket payout:'):source.index(
-            '// ============================================================\n// STATUS', source.index('// Nonblocking ticket payout:'))]
+            '// STATUS', source.index('// Nonblocking ticket payout:'))]
         harness = r'''
 #include <cassert>
 #include <sstream>

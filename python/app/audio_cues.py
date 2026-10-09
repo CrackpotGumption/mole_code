@@ -49,19 +49,21 @@ def read_samples(path):
 
 
 def failure_mix(directory, seconds, rng=None, include_failure=True, victory=False):
-    """Mix all laugh variants, then repeat randomly for the full failure state."""
+    """Space out failure laughs; retain the layered victory celebration."""
     rng = rng or random.Random()
     names = ('cheer', 'whistle', 'kiss') if victory else ('laugh_1', 'laugh_2', 'laugh_3')
     intro = 'victory' if victory else 'failure'
     tracks = {name: read_samples(directory / f'{name}.wav') for name in (intro, *names)}
     mixed = [0] * math.ceil(seconds * SAMPLE_RATE)
-    schedule = [(name, 0.1 + index * 0.3) for index, name in enumerate(names)]
+    schedule = [(name, 0.1 + index * 0.3) for index, name in enumerate(names)] if victory else []
     if include_failure:
         schedule.insert(0, (intro, 0))
-    moment = 1.0
+    moment = 1.0 if victory or include_failure else 0.1
     while moment < seconds:
-        schedule.append((rng.choice(names), moment))
-        moment += rng.uniform(0.35, 0.8)
+        name = rng.choice(names)
+        schedule.append((name, moment))
+        moment += (rng.uniform(0.35, 0.8) if victory
+                   else len(tracks[name]) / SAMPLE_RATE + rng.uniform(0.4, 0.8))
     for name, moment in schedule:
         offset = int(moment * SAMPLE_RATE)
         for index, sample in enumerate(tracks[name][:max(0, len(mixed) - offset)]):

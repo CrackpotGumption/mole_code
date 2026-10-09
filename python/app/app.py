@@ -16,9 +16,15 @@ def keyboard_rfid_loop(arduino, stopped):
         if key == "":
             return
         key = key.strip()
+        if key.upper() in ("RFID STATUS", "RFID INIT", "HEARTBEAT ON", "HEARTBEAT OFF"):
+            arduino.send(key.upper())
+            continue
+        if key.upper().startswith("RFID "):
+            key = key[5:].strip()
         if key in ("1", "2", "3", "4", "5", "6"):
-            card_id = f"00{key}"
-            arduino.event_queue.put((f"RFID {card_id}", time.monotonic()))
+            key = f"00{key}"
+        if key in ("001", "002", "003", "004", "005", "006"):
+            arduino.event_queue.put((f"RFID {key}", time.monotonic()))
 
 
 def main():
@@ -47,6 +53,7 @@ def main():
         game = MoleGame(arduino, state_path=os.environ.get("GAME_STATE_PATH") or None,
                         audio=audio, failure_seconds=os.environ.get("FAILURE_SECONDS", "15"),
                         victory_seconds=os.environ.get("VICTORY_SECONDS", "45"),
+                        idle_frame_seconds=os.environ.get("IDLE_FRAME_SECONDS", "2"),
                         stop_requested=stopped.is_set)
         game.restore_hardware()
         arduino.event_handler = game.handle_arduino_event
@@ -58,8 +65,9 @@ def main():
             if game.persistence_error is not None:
                 raise RuntimeError(f"Progress could not be saved: {game.persistence_error}")
             if not arduino.running:
-                print("Arduino connection lost; exiting so the container can restart.")
+                print(f"Arduino connection lost ({getattr(arduino, 'failure_reason', None) or 'serial disconnected'}); exiting so the container can restart.")
                 return 1
+            game.tick_idle()
         return 0
     except Exception as error:
         print(f"CONTROLLER ERROR: {error}", file=sys.stderr)

@@ -1,7 +1,15 @@
+import os
 import queue
 import serial
 import threading
 import time
+
+
+class SerialCommand(str):
+    def __new__(cls, text, quiet=False):
+        instance = super().__new__(cls, text)
+        instance.quiet = quiet
+        return instance
 
 
 class ArduinoController:
@@ -12,15 +20,21 @@ class ArduinoController:
         self,
         port="/dev/cu.usbmodem1101",
         baud=115200,
+        ready_timeout=10.0,
     ):
 
         self.serial = serial.Serial(
             port,
             baud,
             timeout=0.1,
+            write_timeout=1.0,
         )
 
         self.event_handler = None
+        self.log_raw_accel = os.environ.get("LOG_RAW_ACCEL", "0") == "1"
+        self.log_heartbeat = os.environ.get("LOG_HEARTBEAT", "0") == "1"
+        self.log_rainbow_commands = os.environ.get("LOG_RAINBOW_COMMANDS", "0") == "1"
+        self._quiet_command_ack = False
 
         # All outgoing commands go through one queue.
         self.command_queue = queue.Queue()
@@ -37,12 +51,13 @@ class ArduinoController:
         # Set by reader thread when Arduino replies
         # OK ... or ERROR ...
         self.command_ack = threading.Event()
+        self._ready_event = threading.Event()
 
         self.running = True
+        self.failure_reason = None
 
 
-        # Mega resets when serial connection opens.
-        time.sleep(2)
+        # Read boot diagnostics immediately; do not assume startup takes 2 s.
 
 
         # ----------------------------------------------------
@@ -55,6 +70,13 @@ class ArduinoController:
         )
 
         self.reader.start()
+        if not self._ready_event.wait(timeout=ready_timeout):
+            self.failure_reason = "Arduino did not report READY during startup"
+            self.close()
+            raise TimeoutError(self.failure_reason + "; inspect boot output and reset/power-cycle the logic hardware")
+        if not self.running:
+            self.close()
+            raise RuntimeError(self.failure_reason or "Arduino disconnected during startup")
 
 
         # ----------------------------------------------------
@@ -98,6 +120,7 @@ class ArduinoController:
     def send(
         self,
         command,
+        quiet=False,
     ):
 
         command = command.strip()
@@ -106,8 +129,10 @@ class ArduinoController:
             return
 
 
+        if not self.running:
+            raise RuntimeError("Arduino connection is unavailable")
         self.command_queue.put(
-            command
+            SerialCommand(command, quiet=quiet)
         )
 
 
@@ -150,9 +175,10 @@ class ArduinoController:
                 self.command_ack.clear()
 
 
-                print(
-                    f">> {command}"
-                )
+                self._quiet_command_ack = (getattr(command, "quiet", False)
+                                           and not getattr(self, "log_rainbow_commands", False))
+                if not self._quiet_command_ack:
+                    print(f">> {command}")
 
 
                 message = (
@@ -186,9 +212,10 @@ class ArduinoController:
 
                 if not acknowledged:
 
-                    print(
-                        f"!! ACK TIMEOUT: {command}"
-                    )
+                    self.failure_reason = f"ACK TIMEOUT: {command}"
+                    print(f"!! {self.failure_reason}; stopping serial commands for recovery")
+                    self.running = False
+                    return
 
 
                 # Tiny breathing room after command completion.
@@ -203,6 +230,7 @@ class ArduinoController:
                     f"SERIAL WRITE ERROR: {e}"
                 )
 
+                self.failure_reason = f"SERIAL WRITE ERROR: {e}"
                 self.running = False
 
 
@@ -227,11 +255,13 @@ class ArduinoController:
 
 
             except serial.SerialException as e:
-
+                if not self.running:
+                    return  # Expected if close() interrupts an in-flight read.
                 print(
                     f"SERIAL READ ERROR: {e}"
                 )
 
+                self.failure_reason = f"SERIAL READ ERROR: {e}"
                 self.running = False
 
                 return
@@ -249,11 +279,16 @@ class ArduinoController:
 
             if not text:
                 continue
+            if text == "READY":
+                self._ready_event.set()
 
 
-            print(
-                f"<< {text}"
-            )
+            hide_sample = text.startswith("ACCEL ") and not self.log_raw_accel
+            hide_heartbeat = text.startswith("HEARTBEAT ") and not getattr(self, "log_heartbeat", False)
+            hide_rainbow_ack = (getattr(self, "_quiet_command_ack", False)
+                                and text.startswith(("OK LIGHT ", "OK PLAYER_LIGHT ")))
+            if not (hide_sample or hide_heartbeat or hide_rainbow_ack):
+                print(f"<< {text}")
 
 
             # ------------------------------------------------
@@ -276,6 +311,7 @@ class ArduinoController:
             ):
 
                 self.command_ack.set()
+                self._quiet_command_ack = False
 
 
             # ------------------------------------------------
@@ -285,7 +321,7 @@ class ArduinoController:
             #
             # RFID 002
             # RFID_DIAG READY_FOR_NEXT_CARD
-            # HIT 3 4 5821
+            # HIT 3 3 5821
             # ------------------------------------------------
 
             self._queue_event(text, time.monotonic())

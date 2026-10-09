@@ -29,23 +29,23 @@ class SensorCaptureTests(unittest.TestCase):
     def test_capture_routes_hits_while_preserving_badges(self):
         controller = self.controller
         controller.begin_sensor_capture()
-        controller._queue_event('ACCEL 0 1 0 0 -10000', 10)
-        controller._queue_event('HIT 1 0 18000', 11)
+        controller._queue_event('ACCEL 0 0 0 0 -10000', 10)
+        controller._queue_event('HIT 1 1 18000', 11)
         controller._queue_event('RFID 003', 12)
         self.assertEqual(controller.read_captured_samples(),
-                         [('ACCEL 0 1 0 0 -10000', 10), ('HIT 1 0 18000', 11)])
+                         [('ACCEL 0 0 0 0 -10000', 10), ('HIT 1 1 18000', 11)])
         self.assertEqual(controller.event_queue.get_nowait(), ('RFID 003', 12))
         controller._queue_event('ACCEL 2 2 0 0 -10000', 13)
         controller.end_sensor_capture()
         self.assertEqual(controller.read_captured_samples(), [])
-        controller._queue_event('ACCEL 3 4 0 0 -10000', 14)
-        self.assertEqual(controller.event_queue.get_nowait(), ('ACCEL 3 4 0 0 -10000', 14))
+        controller._queue_event('ACCEL 3 3 0 0 -10000', 14)
+        self.assertEqual(controller.event_queue.get_nowait(), ('ACCEL 3 3 0 0 -10000', 14))
 
     def test_capture_is_bounded_and_retains_recent_samples(self):
         controller = self.controller
         controller.begin_sensor_capture()
         for timestamp in range(5):
-            controller._queue_event('ACCEL 0 1 0 0 -10000', timestamp)
+            controller._queue_event('ACCEL 0 0 0 0 -10000', timestamp)
         self.assertEqual([timestamp for _, timestamp in controller.read_captured_samples()], [3, 4])
 
     def test_ticket_completion_is_not_dropped_by_sensor_flood(self):
@@ -53,7 +53,107 @@ class SensorCaptureTests(unittest.TestCase):
         controller.begin_sensor_capture()
         controller._queue_event('TICKET_DONE 8', 0)
         for timestamp in range(10):
-            controller._queue_event('ACCEL 0 1 0 0 -10000', timestamp)
+            controller._queue_event('ACCEL 0 0 0 0 -10000', timestamp)
         samples = controller.read_captured_samples()
         self.assertIn(('TICKET_DONE 8', 0), samples)
         self.assertEqual(len(samples), 3)
+
+    def test_reader_does_not_log_raw_samples_by_default(self):
+        controller = self.controller
+        controller.running = True
+        controller.log_raw_accel = False
+        controller.command_ack = threading.Event()
+        lines = [b'ACCEL 0 0 0 0 -9000\n', b'OK SENSORS PUZZLE ARMED\n']
+
+        class Port:
+            def readline(self):
+                if lines:
+                    return lines.pop(0)
+                controller.running = False
+                return b''
+
+        controller.serial = Port()
+        with patch('builtins.print') as output:
+            controller._reader_loop()
+        output.assert_called_once_with('<< OK SENSORS PUZZLE ARMED')
+        self.assertTrue(controller.command_ack.is_set())
+
+    def test_first_ack_timeout_stops_writer_and_rejects_more_commands(self):
+        controller = self.controller
+        controller.running = True
+        controller.failure_reason = None
+        controller.serial = Mock()
+        controller.command_ack = Mock()
+        controller.command_ack.wait.return_value = False
+        controller.command_queue = queue.Queue()
+        controller.command_queue.put('MOLE 3 DOWN')
+        controller.command_queue.put('MOLE 4 UP')
+        with patch('builtins.print'):
+            controller._writer_loop()
+        self.assertFalse(controller.running)
+        self.assertEqual(controller.failure_reason, 'ACK TIMEOUT: MOLE 3 DOWN')
+        controller.serial.write.assert_called_once_with(b'MOLE 3 DOWN\n')
+        self.assertEqual(controller.command_queue.qsize(), 1)
+        with self.assertRaises(RuntimeError):
+            controller.send('LIGHTS OFF')
+        with self.assertRaises(RuntimeError):
+            controller.wait_until_idle()
+
+    def test_quiet_rainbow_ack_and_heartbeat_keep_errors_visible(self):
+        controller = self.controller
+        controller.running = True
+        controller.log_raw_accel = False
+        controller.log_heartbeat = False
+        controller._quiet_command_ack = True
+        controller.command_ack = threading.Event()
+        lines = [b'HEARTBEAT 1000 LOOPS 10 SENSORS DISABLED\n',
+                 b'OK LIGHT 0 255 0 0\n', b'ERROR BAD LIGHT\n']
+
+        class Port:
+            def readline(self):
+                if lines:
+                    return lines.pop(0)
+                controller.running = False
+                return b''
+
+        controller.serial = Port()
+        with patch('builtins.print') as output:
+            controller._reader_loop()
+        output.assert_called_once_with('<< ERROR BAD LIGHT')
+        self.assertTrue(controller.command_ack.is_set())
+
+    def test_startup_waits_for_ready_before_starting_writer(self):
+        serial_module = ArduinoController.__init__.__globals__["serial"]
+        events = []
+
+        class Controller(ArduinoController):
+            def _reader_loop(self):
+                events.append('boot')
+                self._ready_event.set()
+
+            def _writer_loop(self):
+                events.append('writer')
+
+            def _event_loop(self):
+                pass
+
+        port = Mock()
+        with patch.object(serial_module, 'Serial', return_value=port, create=True):
+            controller = Controller(ready_timeout=0.2)
+            controller.writer.join(timeout=0.2)
+            controller.close()
+        self.assertEqual(events, ['boot', 'writer'])
+
+    def test_missing_ready_closes_port_without_sending_commands(self):
+        serial_module = ArduinoController.__init__.__globals__["serial"]
+
+        class Controller(ArduinoController):
+            def _reader_loop(self):
+                pass
+
+        port = Mock()
+        with patch.object(serial_module, 'Serial', return_value=port, create=True):
+            with self.assertRaisesRegex(TimeoutError, 'did not report READY'):
+                Controller(ready_timeout=0.01)
+        port.close.assert_called_once()
+        port.write.assert_not_called()

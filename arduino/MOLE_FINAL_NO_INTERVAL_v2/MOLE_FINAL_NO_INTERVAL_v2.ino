@@ -28,7 +28,7 @@
 
 #define MOLE_COUNT 5
 
-#define MOLE_LED_COUNT 3
+#define MOLE_LED_COUNT 21
 
 #define PLAYER_COUNT 6
 
@@ -41,6 +41,14 @@
 
 
 const unsigned long SENSOR_INTERVAL = 10;
+const unsigned long RFID_POLL_INTERVAL = 250;
+unsigned long lastRFIDPoll = 0;
+bool rfidReaderAvailable = false;
+const unsigned long RAW_REPORT_INTERVAL = 50;
+const unsigned long PUZZLE_HIT_INTERVAL = 300;
+const unsigned long PUZZLE_ARM_SETTLE = 750;
+const int16_t PUZZLE_HIT_Z = -9000;
+const int16_t PUZZLE_RELEASE_Z = -6400;
 
 
 
@@ -51,6 +59,7 @@ const unsigned long SENSOR_INTERVAL = 10;
 const unsigned long I2C_TIMEOUT_US = 25000;
 
 const unsigned long HEARTBEAT_INTERVAL = 1000;
+bool heartbeatEnabled = false;
 
 
 
@@ -427,6 +436,7 @@ String commandBuffer = "";
 //
 
 void emitHeartbeat() {
+  if (!heartbeatEnabled) return;
 
   unsigned long now = millis();
 
@@ -486,20 +496,20 @@ void emitHeartbeat() {
 
 //
 
+void configureI2CTimeout() {
+  // Requires a current Arduino AVR Boards core. Wire.h exposes these methods
+  // but does not define WIRE_HAS_TIMEOUT.
+  Wire.setWireTimeout(I2C_TIMEOUT_US, true);
+  Serial.print("I2C TIMEOUT ENABLED ");
+  Serial.print(I2C_TIMEOUT_US);
+  Serial.println(" us");
+}
+
 void reportI2CTimeoutIfNeeded() {
-
-#if defined(WIRE_HAS_TIMEOUT)
-
   if (Wire.getWireTimeoutFlag()) {
-
     Serial.println("I2C_TIMEOUT");
-
     Wire.clearWireTimeoutFlag();
-
   }
-
-#endif
-
 }
 
 
@@ -960,146 +970,143 @@ void configureAccelerometerRange(
 
 // ============================================================
 
-// ACCELEROMETER STREAMING
-
+// SENSOR MODES
 // ============================================================
-
-//
-
-// Arduino does no hit classification and no movement filtering.
-
-//
-
-// While sensors are enabled, poll all five MPU6050s every
-
-// SENSOR_INTERVAL and send EVERY sample to Python.
-
-//
-
-// Python owns all interpretation:
-
-//   - gameplay state
-
-//   - Z direction
-
-//   - thresholds
-
-//   - pneumatic-motion handling
-
-//   - debounce/cooldown
-
-//   - hit decisions
-
-//
-
-// Format:
-
+// SENSORS PUZZLE: 10 ms polling, one downward HIT, then disarm.
+// SENSORS ENABLE: 10 ms polling, peak-preserving ACCEL reports every 50 ms.
+// Both modes use the same physical sensor mapping. Python owns game rules.
+// SENSORS DISABLE: stop polling/reporting.
+// HIT <mole> <mux_channel> <positive downward strength>
 // ACCEL <mole> <mux_channel> <x> <y> <z>
 
-//
+// PUZZLE: poll frequently, emit one HIT, wait for explicit Python re-arm.
+// RAW: keep polling at 10 ms, report the most negative sample in each 50 ms
+// window so reducing serial traffic does not discard brief downward strikes.
+bool puzzleSensorMode = false;
+bool puzzleHitArmed = false;
+bool puzzleLatched[MOLE_COUNT] = {false, false, false, false, false};
+bool puzzleHasHit = false;
+unsigned long lastPuzzleHit = 0;
+unsigned long puzzleArmStart = 0;
+unsigned long lastRawReport = 0;
+bool rawPeakValid[MOLE_COUNT] = {false, false, false, false, false};
+int16_t rawPeakX[MOLE_COUNT], rawPeakY[MOLE_COUNT], rawPeakZ[MOLE_COUNT];
 
-// Example:
+unsigned long lastPuzzleDiagnostic = 0;
+unsigned long puzzleReads[MOLE_COUNT] = {0, 0, 0, 0, 0};
+unsigned long puzzleFailures[MOLE_COUNT] = {0, 0, 0, 0, 0};
+int16_t puzzleMinZ[MOLE_COUNT] = {32767, 32767, 32767, 32767, 32767};
+int16_t puzzleMaxZ[MOLE_COUNT] = {-32768, -32768, -32768, -32768, -32768};
 
-// ACCEL 2 2 -1200 18342 -2100
-
-// ============================================================
-
-
-
-void checkForHits() {
-
-
-
-  if (!hitDetectionEnabled) {
-
-    return;
-
-  }
-
-
-
-  unsigned long now = millis();
-
-
-
-  if (
-
-    now - lastSensorPoll
-
-    < SENSOR_INTERVAL
-
-  ) {
-
-    return;
-
-  }
-
-
-
-  lastSensorPoll = now;
-
-
-
+void emitPuzzleDiagnostics(unsigned long now) {
+  if (now - lastPuzzleDiagnostic < 1000) return;
+  lastPuzzleDiagnostic = now;
   for (int mole = 0; mole < MOLE_COUNT; mole++) {
-
-
-
-    int16_t x;
-
-    int16_t y;
-
-    int16_t z;
-
-
-
-    if (
-
-      !readAccelerometer(
-
-        sensorChannel[mole],
-
-        x,
-
-        y,
-
-        z
-
-      )
-
-    ) {
-
-      continue;
-
-    }
-
-
-
-    Serial.print("ACCEL ");
-
-    Serial.print(mole);
-
-    Serial.print(" ");
-
-    Serial.print(sensorChannel[mole]);
-
-    Serial.print(" ");
-
-    Serial.print(x);
-
-    Serial.print(" ");
-
-    Serial.print(y);
-
-    Serial.print(" ");
-
-    Serial.println(z);
-
+    Serial.print("PUZZLE_DIAG MOLE "); Serial.print(mole);
+    Serial.print(" ARMED "); Serial.print(puzzleHitArmed ? 1 : 0);
+    Serial.print(" LATCHED "); Serial.print(puzzleLatched[mole] ? 1 : 0);
+    Serial.print(" READS "); Serial.print(puzzleReads[mole]);
+    Serial.print(" FAILURES "); Serial.print(puzzleFailures[mole]);
+    Serial.print(" MIN_Z "); Serial.print(puzzleMinZ[mole]);
+    Serial.print(" MAX_Z "); Serial.println(puzzleMaxZ[mole]);
+    puzzleReads[mole] = 0;
+    puzzleFailures[mole] = 0;
+    puzzleMinZ[mole] = 32767;
+    puzzleMaxZ[mole] = -32768;
   }
-
 }
 
+void enableSensorMode(bool puzzle) {
+  puzzleSensorMode = puzzle;
+  puzzleHitArmed = puzzle;
+  if (puzzle) {
+    puzzleArmStart = millis();
+    // Each sensor must return to rest AFTER mechanical settling.
+    for (int mole = 0; mole < MOLE_COUNT; mole++) puzzleLatched[mole] = true;
+  }
+  hitDetectionEnabled = true;
+  lastRawReport = millis();
+  lastPuzzleDiagnostic = lastRawReport;
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    rawPeakValid[mole] = false;
+    puzzleReads[mole] = 0;
+    puzzleFailures[mole] = 0;
+    puzzleMinZ[mole] = 32767;
+    puzzleMaxZ[mole] = -32768;
+  }
+}
 
-
+void checkForHits() {
+  if (!hitDetectionEnabled) return;
+  unsigned long now = millis();
+  if (now - lastSensorPoll < SENSOR_INTERVAL) return;
+  lastSensorPoll = now;
+  int selected = -1;
+  bool strikeThisPoll[MOLE_COUNT] = {false, false, false, false, false};
+  int16_t strongestZ = 0;
+  bool settled = !puzzleSensorMode || now - puzzleArmStart >= PUZZLE_ARM_SETTLE;
+  bool intervalReady = settled && (!puzzleHasHit || now - lastPuzzleHit >= PUZZLE_HIT_INTERVAL);
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    int16_t x, y, z;
+    if (!readAccelerometer(sensorChannel[mole], x, y, z)) {
+      if (puzzleSensorMode) puzzleFailures[mole]++;
+      continue;
+    }
+    if (puzzleSensorMode) {
+      puzzleReads[mole]++;
+      if (z < puzzleMinZ[mole]) puzzleMinZ[mole] = z;
+      if (z > puzzleMaxZ[mole]) puzzleMaxZ[mole] = z;
+    }
+    if (settled && z > PUZZLE_RELEASE_Z) puzzleLatched[mole] = false;
+    strikeThisPoll[mole] = z <= PUZZLE_HIT_Z;
+    if (puzzleSensorMode) {
+      if (puzzleHitArmed && intervalReady && !puzzleLatched[mole]
+          && z <= PUZZLE_HIT_Z && (selected < 0 || z < strongestZ)) {
+        selected = mole;
+        strongestZ = z;
+      }
+    } else if (!rawPeakValid[mole] || z < rawPeakZ[mole]) {
+      rawPeakValid[mole] = true;
+      rawPeakX[mole] = x;
+      rawPeakY[mole] = y;
+      rawPeakZ[mole] = z;
+    }
+  }
+  if (puzzleSensorMode) {
+    if (selected >= 0) {
+      puzzleHitArmed = false;
+      for (int mole = 0; mole < MOLE_COUNT; mole++) {
+        if (strikeThisPoll[mole]) puzzleLatched[mole] = true;
+      }
+      puzzleHasHit = true;
+      lastPuzzleHit = now;
+      Serial.print("HIT ");
+      Serial.print(selected);
+      Serial.print(" ");
+      Serial.print(sensorChannel[selected]);
+      Serial.print(" ");
+      Serial.println(-(long)strongestZ);
+    }
+    emitPuzzleDiagnostics(now);
+    return;
+  }
+  if (now - lastRawReport < RAW_REPORT_INTERVAL) return;
+  lastRawReport = now;
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    if (!rawPeakValid[mole]) continue;
+    Serial.print("ACCEL ");
+    Serial.print(mole);
+    Serial.print(" ");
+    Serial.print(sensorChannel[mole]);
+    Serial.print(" ");
+    Serial.print(rawPeakX[mole]);
+    Serial.print(" ");
+    Serial.print(rawPeakY[mole]);
+    Serial.print(" ");
+    Serial.println(rawPeakZ[mole]);
+    rawPeakValid[mole] = false;
+  }
+}
 
 
 // ============================================================
@@ -2798,6 +2805,8 @@ void printRFIDStatus() {
 
 
 
+  rfidReaderAvailable = version != 0x00 && version != 0xFF;
+
   Serial.print(
 
     "RFID_DIAG VERSION 0x"
@@ -2856,6 +2865,27 @@ void printRFIDStatus() {
 
 
 
+void reportRFIDCheckpoint(const char* phase) {
+  Serial.print("RFID_DIAG PHASE ");
+  Serial.println(phase);
+  printRFIDStatus();
+}
+
+// Match the known-working tester and retry a transient startup failure.
+bool initializeRFIDReader() {
+  SPI.begin();
+  rfidReaderAvailable = false;
+  for (int attempt = 1; attempt <= 3; attempt++) {
+    Serial.print("RFID_DIAG INIT ATTEMPT ");
+    Serial.println(attempt);
+    rfid.PCD_Init();
+    delay(100);
+    printRFIDStatus();
+    if (rfidReaderAvailable) return true;
+  }
+  return false;
+}
+
 // ============================================================
 
 // TICKET MOTOR
@@ -2898,253 +2928,57 @@ void ticketMotor(
 
 
 
-bool dispenseTickets(
+// Nonblocking ticket payout: loop() keeps servicing serial and accelerometers.
+bool ticketPayoutActive = false;
+int ticketTarget = 0;
+int ticketDispensed = 0;
+int ticketLastSensorState = HIGH;
+unsigned long ticketPayoutStart = 0;
+unsigned long ticketLastPulse = 0;
 
-  int count
-
-) {
-
-
-
-  if (
-
-    count <= 0
-
-  ) {
-
-    return true;
-
+bool dispenseTickets(int count) {
+  if (ticketPayoutActive) {
+    Serial.println("ERROR TICKET BUSY");
+    return false;
   }
-
-
-
-
-
-  Serial.print(
-
-    "TICKET_START "
-
-  );
-
-
-
-  Serial.println(
-
-    count
-
-  );
-
-
-
-
-
-  int dispensed =
-
-    0;
-
-
-
-
-
-  int lastSensorState =
-
-    digitalRead(
-
-      TICKET_SENSOR_PIN
-
-    );
-
-
-
-
-
-  unsigned long startTime =
-
-    millis();
-
-
-
-
-
-  unsigned long maxTime =
-
-    TICKET_TIMEOUT_PER_TICKET
-
-    * count;
-
-
-
-
-
-  ticketMotor(
-
-    true
-
-  );
-
-
-
-
-
-  while (
-
-    dispensed < count
-
-  ) {
-
-
-
-    int currentState =
-
-      digitalRead(
-
-        TICKET_SENSOR_PIN
-
-      );
-
-
-
-
-
-    if (
-
-      currentState ==
-
-        TICKET_SENSOR_ACTIVE
-
-      &&
-
-      lastSensorState !=
-
-        TICKET_SENSOR_ACTIVE
-
-    ) {
-
-
-
-      dispensed++;
-
-
-
-
-
-      Serial.print(
-
-        "TICKET_COUNT "
-
-      );
-
-
-
-      Serial.println(
-
-        dispensed
-
-      );
-
-
-
-
-
-      delay(25);
-
-    }
-
-
-
-
-
-    lastSensorState =
-
-      currentState;
-
-
-
-
-
-    if (
-
-      millis() - startTime
-
-      > maxTime
-
-    ) {
-
-
-
-      ticketMotor(
-
-        false
-
-      );
-
-
-
-
-
-      Serial.print(
-
-        "TICKET_ERROR TIMEOUT "
-
-      );
-
-
-
-      Serial.println(
-
-        dispensed
-
-      );
-
-
-
-
-
-      return false;
-
-    }
-
-  }
-
-
-
-
-
-  ticketMotor(
-
-    false
-
-  );
-
-
-
-
-
-  Serial.print(
-
-    "TICKET_DONE "
-
-  );
-
-
-
-  Serial.println(
-
-    dispensed
-
-  );
-
-
-
-
-
+  ticketTarget = count;
+  ticketDispensed = 0;
+  ticketLastSensorState = digitalRead(TICKET_SENSOR_PIN);
+  ticketPayoutStart = millis();
+  ticketLastPulse = ticketPayoutStart - 25;
+  ticketPayoutActive = true;
+  ticketMotor(true);
+  Serial.print("TICKET_START ");
+  Serial.println(count);
+  Serial.print("OK TICKET STARTED ");
+  Serial.println(count);
   return true;
-
 }
 
-
-
-
+void updateTickets() {
+  if (!ticketPayoutActive) return;
+  unsigned long now = millis();
+  int sensor = digitalRead(TICKET_SENSOR_PIN);
+  if (sensor == TICKET_SENSOR_ACTIVE && ticketLastSensorState != TICKET_SENSOR_ACTIVE
+      && now - ticketLastPulse >= 25) {
+    ticketDispensed++;
+    ticketLastPulse = now;
+    Serial.print("TICKET_COUNT ");
+    Serial.println(ticketDispensed);
+  }
+  ticketLastSensorState = sensor;
+  if (ticketDispensed >= ticketTarget) {
+    ticketMotor(false);
+    ticketPayoutActive = false;
+    Serial.print("TICKET_DONE ");
+    Serial.println(ticketDispensed);
+  } else if (now - ticketPayoutStart > TICKET_TIMEOUT_PER_TICKET * ticketTarget) {
+    ticketMotor(false);
+    ticketPayoutActive = false;
+    Serial.print("TICKET_ERROR TIMEOUT ");
+    Serial.println(ticketDispensed);
+  }
+}
 
 // ============================================================
 
@@ -3236,13 +3070,25 @@ void handleCommand(
 
 
 
+  if (command == "HEARTBEAT ON" || command == "HEARTBEAT OFF") {
+    heartbeatEnabled = command == "HEARTBEAT ON";
+    Serial.println(heartbeatEnabled ? "OK HEARTBEAT ON" : "OK HEARTBEAT OFF");
+    return;
+  }
+
+  if (command == "SENSORS PUZZLE") {
+    enableSensorMode(true);
+    Serial.println("OK SENSORS PUZZLE ARMED");
+    return;
+  }
+
   if (
 
     command == "SENSORS ENABLE"
 
   ) {
 
-    hitDetectionEnabled = true;
+    enableSensorMode(false);
 
     lastMechanicalAction = millis();
 
@@ -3261,6 +3107,7 @@ void handleCommand(
   ) {
 
     hitDetectionEnabled = false;
+    puzzleHitArmed = false;
 
     Serial.println("OK SENSORS DISABLED");
 
@@ -3626,6 +3473,18 @@ void handleCommand(
 
 
 
+  int rgbPlayer, playerR, playerG, playerB;
+  if (sscanf(command.c_str(), "PLAYER_LIGHT %d %d %d %d",
+      &rgbPlayer, &playerR, &playerG, &playerB) == 4) {
+    if (rgbPlayer < 0 || rgbPlayer >= PLAYER_COUNT) {
+      Serial.println("ERROR BAD PLAYER");
+      return;
+    }
+    setPlayerLight(rgbPlayer, playerR, playerG, playerB);
+    Serial.println("OK PLAYER_LIGHT RGB");
+    return;
+  }
+
   int player;
 
   char playerAction[16];
@@ -3837,12 +3696,19 @@ void handleCommand(
   ) {
 
     printRFIDStatus();
+    Serial.println("OK RFID STATUS");
 
     return;
 
   }
 
 
+
+  if (command == "RFID INIT") {
+    if (initializeRFIDReader()) Serial.println("OK RFID INIT");
+    else Serial.println("ERROR RFID INIT FAILED");
+    return;
+  }
 
   // ----------------------------------------------------------
 
@@ -3996,25 +3862,18 @@ void setup() {
 
 
 
+  // Check RFID before cabinet peripherals, matching the standalone tester.
+  Serial.println("RFID_DIAG PHASE EARLY BEFORE CABINET");
+  Serial.print("RFID_DIAG SS_PIN "); Serial.print(RFID_SS_PIN);
+  Serial.print(" RST_PIN "); Serial.println(RFID_RST_PIN);
+  initializeRFIDReader();
+
   Wire.begin();
 
 
 
-#if defined(WIRE_HAS_TIMEOUT)
-
-  Wire.setWireTimeout(I2C_TIMEOUT_US, true);
-
-  Serial.print("I2C TIMEOUT ENABLED ");
-
-  Serial.print(I2C_TIMEOUT_US);
-
-  Serial.println(" us");
-
-#else
-
-  Serial.println("WIRE TIMEOUT API NOT AVAILABLE");
-
-#endif
+  configureI2CTimeout();
+  reportRFIDCheckpoint("AFTER I2C");
 
 
 
@@ -4064,6 +3923,8 @@ void setup() {
 
 
 
+  reportRFIDCheckpoint("AFTER MOLE LEDS");
+
   // ----------------------------------------------------------
 
   // Player LEDs
@@ -4073,6 +3934,7 @@ void setup() {
 
 
   playerLights.begin();
+  reportRFIDCheckpoint("AFTER PLAYER BEGIN");
 
 
 
@@ -4084,7 +3946,11 @@ void setup() {
 
 
 
-  clearPlayerLights();
+  reportRFIDCheckpoint("AFTER PLAYER BRIGHTNESS");
+  playerLights.clear();
+  reportRFIDCheckpoint("AFTER PLAYER BUFFER CLEAR");
+  playerLights.show();
+  reportRFIDCheckpoint("AFTER PLAYER LEDS");
 
 
 
@@ -4158,6 +4024,8 @@ void setup() {
 
 
 
+  reportRFIDCheckpoint("AFTER SOLENOIDS");
+
   // ----------------------------------------------------------
 
   // Accelerometers
@@ -4167,6 +4035,7 @@ void setup() {
 
 
   initializeSensors();
+  reportRFIDCheckpoint("AFTER SENSORS");
 
 
 
@@ -4177,39 +4046,6 @@ void setup() {
   // RFID
 
   // ----------------------------------------------------------
-
-
-
-  SPI.begin();
-
-
-
-
-
-  pinMode(
-
-    RFID_SS_PIN,
-
-    OUTPUT
-
-  );
-
-
-
-
-
-  rfid.PCD_Init();
-
-
-
-
-
-  delay(
-
-    50
-
-  );
-
 
 
 
@@ -4402,11 +4238,15 @@ void loop() {
 
 
 
-  checkRFID();
-
-
-
+  // Sample first. RC522 card-presence checks can block on a missing card;
+  // running one on every loop was delaying every accelerometer scan.
   checkForHits();
+  updateTickets();
+  unsigned long now = millis();
+  if (rfidReaderAvailable && now - lastRFIDPoll >= RFID_POLL_INTERVAL) {
+    checkRFID();
+    lastRFIDPoll = millis();
+  }
 
 
 

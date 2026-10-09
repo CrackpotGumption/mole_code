@@ -67,8 +67,9 @@ class AudioFailureTests(unittest.TestCase):
                     moves += 1
                 else:
                     active.discard(mole)
-                self.assertLessEqual(len(active), 3)
+                self.assertLessEqual(len(active), 2)
         self.assertGreater(moves, 3)
+        self.assertLessEqual(moves, 30)
 
     def test_duration_configuration_and_cancel(self):
         for duration in (0, 1.25):
@@ -100,12 +101,12 @@ class AudioFailureTests(unittest.TestCase):
         captured = []
         original_send = self.hardware.send
 
-        def send(command):
+        def send(command, **kwargs):
             timing.append((clock.now, command))
             original_send(command)
             if command == 'MOLE 0 UP':
-                captured.extend([('ACCEL 0 1 0 0 -12000', clock.now + 0.01),
-                                 ('ACCEL 0 1 0 0 -14000', clock.now + 0.02)])
+                captured.extend([('ACCEL 0 0 0 0 -12000', clock.now + 0.01),
+                                 ('ACCEL 0 0 0 0 -14000', clock.now + 0.02)])
 
         def samples():
             result = list(captured)
@@ -133,9 +134,9 @@ class AudioFailureTests(unittest.TestCase):
 
     def test_failure_strikes_reject_noise_stale_and_wrong_channel(self):
         raised, raised_at, latched, last_hit, pending = {0}, {0: 100}, set(), {}, {}
-        for line, timestamp in [('ACCEL 0 1 0 0 -12000', 99),
+        for line, timestamp in [('ACCEL 0 0 0 0 -12000', 99),
                                 ('ACCEL 0 2 0 0 -12000', 101),
-                                ('ACCEL 0 1 0 0 -2000', 101),
+                                ('ACCEL 0 0 0 0 -2000', 101),
                                 ('ACCEL 1 0 0 0 -12000', 101),
                                 ('ACCEL bad', 101)]:
             self.game._failure_strike(line, timestamp, raised, raised_at,

@@ -82,7 +82,7 @@ animation duration (default 15 seconds). Existing config files are preserved:
 add these keys manually if desired. See `python/README.md` for sound replacement
 and device-check instructions.
 
-The final winning celebration uses `VICTORY_SECONDS` (default 45). It needs the
-updated `MOLE_FINAL_NO_INTERVAL_v1` Arduino firmware for nonblocking tickets
-and RGB player indicators. Update both the image and firmware for interactive
-bashing during payout; see `python/README.md`.
+The final winning celebration uses `VICTORY_SECONDS` (default 45). Python
+now follows the standard v2 wiring. The updated v2 sketch includes nonblocking
+ticket payout and RGB player lights for interactive bashing during payout;
+flash the updated firmware alongside the image. See `python/README.md`.

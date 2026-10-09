@@ -27,7 +27,7 @@ class Hardware:
     def read_captured_samples(self):
         return []
 
-    def send(self, command):
+    def send(self, command, quiet=False):
         self.commands.append(command)
 
     def wait_until_idle(self, timeout=5):
@@ -77,8 +77,10 @@ class RuntimeTests(unittest.TestCase):
         previous = signal.getsignal(signal.SIGTERM)
         result, hardware, services = self.run_main('signal')
         self.assertEqual(result, 0)
-        self.assertEqual(hardware.commands,
-                         ['SENSORS DISABLE', 'MOLES ALL DOWN', 'LIGHTS OFF', 'PLAYER_LIGHTS OFF'] * 2)
+        self.assertEqual(hardware.commands[:4],
+                         ['SENSORS DISABLE', 'MOLES ALL DOWN', 'LIGHTS OFF', 'PLAYER_LIGHTS OFF'])
+        self.assertEqual(hardware.commands[-4:], hardware.commands[:4])
+        self.assertEqual(len([command for command in hardware.commands if command.startswith('LIGHT ')]), 5)
         self.assertTrue(hardware.drained)
         self.assertTrue(hardware.closed)
         self.assertTrue(services[0].stopped)
