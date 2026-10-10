@@ -121,23 +121,34 @@ class AccelGameTests(unittest.TestCase):
         self.sample(mole, timestamp=now + 0.4)
         self.assertGreater(len(self.hardware.commands), count)
 
-    def test_puzzle_arms_once_and_rearms_after_correct_hit(self):
-        self.assertEqual(self.hardware.commands[-1], "SENSORS PUZZLE")
+    def test_v3_enables_detection_after_setup_and_correct_hit(self):
+        self.assertEqual(self.hardware.commands[-1], "SENSORS ENABLE")
         mole = self.expected()
         self.game.handle_arduino_event(f"HIT {mole} {mole} 12000")
         self.assertEqual(self.game.state.hit_progress, 1)
-        self.assertEqual(self.hardware.commands[-1], "SENSORS PUZZLE")
-        self.assertEqual(self.hardware.commands.count("SENSORS PUZZLE"), 2)
+        self.assertEqual(self.hardware.commands[-1], "SENSORS ENABLE")
+        self.assertEqual(self.hardware.commands.count("SENSORS ENABLE"), 2)
         # A sample from the prior arm cannot advance another target.
         next_mole = self.expected()
         self.game.handle_arduino_event(f"HIT {next_mole} {next_mole} 12000",
                                       received_at=self.game._accept_samples_after - 1)
         self.assertEqual(self.game.state.hit_progress, 1)
 
+    def test_v3_completed_target_ringing_is_ignored(self):
+        mole = self.expected()
+        self.game.handle_arduino_event(f"HIT {mole} {mole} 12000")
+        commands = list(self.hardware.commands)
+        self.game.handle_arduino_event(f"HIT {mole} {mole} 12000",
+                                      received_at=self.game._accept_samples_after + 1)
+        self.assertEqual(self.game.state.hit_progress, 1)
+        self.assertEqual(self.hardware.commands, commands)
+        self.assertNotIn('HIT_DEBUG ON', commands)
+        self.assertFalse(any(command.startswith('SENSORS FIFO') for command in commands))
+
     def test_immediate_hit_after_arm_is_not_lost(self):
         def drain():
             # Model a reader receiving a HIT as soon as the arming ACK arrives.
-            if self.hardware.commands[-1] == "SENSORS PUZZLE":
+            if self.hardware.commands[-1] == "SENSORS ENABLE":
                 self.received = 101
         with patch('app.mole_game.time.monotonic', side_effect=[100, 102]),                 patch.object(self.hardware, 'wait_until_idle', side_effect=drain):
             self.game._resume_hit_detection()
@@ -149,3 +160,16 @@ class AccelGameTests(unittest.TestCase):
         mole = self.expected()
         self.game.handle_arduino_event(f"HIT {mole} {self.game.SENSOR_CHANNELS[mole]} 18000")
         self.assertEqual(self.game.state.hit_progress, 1)
+
+    def test_v3_hit_advances_once_and_rejects_stale_events(self):
+        with patch.dict('os.environ', {'HIT_THRESHOLD_COUNTS': '4500'}):
+            self.game.handle_rfid('001')
+            self.assertIn('SENSORS ENABLE', self.hardware.commands)
+            mole = self.expected()
+            self.game.handle_arduino_event(f'HIT {mole} {mole} 7000', received_at=self.game._accept_samples_after + 1)
+            self.assertEqual(self.game.state.hit_progress, 1)
+            # Old-arm event cannot advance the next target.
+            next_mole = self.expected()
+            self.game.handle_arduino_event(f'HIT {next_mole} {next_mole} 16000', received_at=self.game._accept_samples_after - 1)
+            self.game.handle_arduino_event(f'MOTION_HIT {next_mole} {next_mole} 4', received_at=self.game._accept_samples_after + 1)
+            self.assertEqual(self.game.state.hit_progress, 1)

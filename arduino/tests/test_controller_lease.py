@@ -16,6 +16,7 @@ class ControllerLeaseTests(unittest.TestCase):
 unsigned long clockMs=0, lastControllerCommand=0;
 const unsigned long CONTROLLER_LEASE_MS=5000;
 bool leaseEnabled=false, hitDetectionEnabled=true, puzzleHitArmed=true;
+void stopFifoPolling() {}
 bool ticketPayoutActive=true, motor=true, molesUp=true, mcpReady=true, stopOutputsPending=false;
 int lowered=0, moleLights=0, playerLights=0;
 unsigned long millis() { return clockMs; }

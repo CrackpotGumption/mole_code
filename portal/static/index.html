@@ -3,4 +3,4 @@
 <body><header><div><span class="eyebrow">MOLE / OPERATIONS</span><h1>Cabinet Control</h1></div><div class="poll"><label>State <select id="stateInterval"><option value="3000">3 seconds</option><option value="5000">5 seconds</option><option value="10000">10 seconds</option></select></label><label>Logs <select id="logInterval"><option value="15000">15 seconds</option><option value="30000" selected>30 seconds</option><option value="60000">60 seconds</option><option value="0">Off</option></select></label><button id="pause">Pause polling</button></div></header>
 <main><div id="fleet"></div><section id="detail" hidden></section></main><footer>HTTP 202 means accepted. Controls are complete only after their operation, serial receipt, or host job succeeds.</footer>
 <dialog id="confirm"><form method="dialog"><h2 id="confirmTitle"></h2><p id="confirmHelp"></p><pre id="confirmPayload"></pre><div class="actions"><button value="cancel">Cancel</button><button value="go" class="danger">Execute control</button></div></form></dialog>
-<script src="/app.js"></script></body></html>
+<script src="/sensors.js"></script><script src="/app.js"></script></body></html>

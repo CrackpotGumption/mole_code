@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict');
+const {parse,Recorder}=require('../static/sensors.js');
+const sweep='HIT_DEBUG FIFO SWEEP MS 2010 VALID_MASK 31 AXIS Y PEAKS 100 200 5200 300 150 SAMPLES 5 5 5 5 5 CLIPPED_MASK 4 WINNER 2 THRESHOLD 4500';
+assert.deepEqual(parse(sweep).peaks,[100,200,5200,300,150]);
+assert.equal(parse(sweep).winner,2);
+const r=new Recorder();const input=(session,lines)=>({application:{version:'3.2.19'},serial:{session_id:session,recent_serial_lines:lines.map(([timestamp,line])=>({timestamp,line}))}});
+r.ingest(input('a',[[1,'HIT_DEBUG FIFO ARM DELAY_MS 1500 AXIS Y BASELINE_MS 250 THRESHOLD 4500'],[2,'HIT_DEBUG FIFO BASE MOLE 2 AXIS Y VALUE -80 SAMPLES 25'],[3,sweep]]));
+assert.equal(r.applied.threshold,4500);assert.equal(r.baselines[2],-80);assert.equal(r.maxima[2],5200);
+r.ingest(input('a',[[1,'HIT_DEBUG FIFO ARM DELAY_MS 1500 AXIS Y BASELINE_MS 250 THRESHOLD 4500'],[2,'HIT_DEBUG FIFO BASE MOLE 2 AXIS Y VALUE -80 SAMPLES 25'],[3,sweep]]));assert.equal(r.rows.length,3);
+r.ingest(input('a',[[4,sweep.replace('VALID_MASK 31','VALID_MASK 27').replace('5200','9000').replace('WINNER 2','WINNER -1')]]));assert.equal(r.gaps,1);assert.equal(r.maxima[2],5200);assert.match(r.phase,/Incomplete/);
+r.ingest(input('b',[[5,'NEW FIRMWARE FIELD'] ]));assert.equal(r.gaps,2);assert.equal(r.maxima[2],null);assert.equal(r.applied,null);assert.equal(r.rows.at(-1).type,'unknown');assert.equal(r.export().session_id,'b');
+console.log('Sensor parser, deduplication, gaps, invalid comparisons, and session reset checks passed');
+
+const v3=new Recorder();
+const scores='SCORES 0:12000 1:800 2:-1 3:600 4:900';
+assert.deepEqual(parse(scores).peaks,[12000,800,-1,600,900]);
+assert.equal(parse(scores).valid,27);
+v3.ingest(input('v3',[[1,'OK SENSORS ENABLED'],[2,scores],[3,'HIT 0 0 12000']]));
+assert.equal(v3.maxima[0],12000);assert.equal(v3.maxima[2],null);
+assert.match(v3.phase,/resumes after cooldown/);
+v3.ingest(input('v3',[[4,'IMPACT_REJECTED winner=0 score=800 runnerup=700']]));
+assert.match(v3.phase,/Impact rejected/);

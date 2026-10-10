@@ -64,6 +64,8 @@ class ArduinoController:
         self._diagnostic_lock = threading.Lock()
         self._recent_errors = deque(maxlen=20)
         self._recent_serial = deque(maxlen=100)
+        self._sensor_zero_streak = {}
+        self._hit_traces = deque(maxlen=250)
         self._last_serial_at = None
         self._last_sensor_at = {}
         self._sensor_status = {}
@@ -415,7 +417,7 @@ class ArduinoController:
             # ------------------------------------------------
 
             current = getattr(self, "_current_command", None)
-            if current is not None and not text.startswith(("ACCEL ", "HIT ", "HEARTBEAT ")):
+            if current is not None and not text.startswith(("ACCEL ", "HIT ", "MOTION_HIT ", "HIT_DEBUG ", "PUZZLE_DIAG ", "HEARTBEAT ")):
                 self._response_lines = (self._response_lines + [text])[-32:]
             if text.startswith("ACK "):
                 fields = text.split()
@@ -450,12 +452,12 @@ class ArduinoController:
 
 
     def _queue_event(self, text, received_at):
-        if not text.startswith(("RFID ", "ACCEL ", "HIT ", "TICKET_")):
+        if not text.startswith(("RFID ", "ACCEL ", "HIT ", "MOTION_HIT ", "TICKET_")):
             return
         with self._capture_lock:
             if self._sensor_capture and text.startswith("TICKET_"):
                 self._captured_ticket_events.put_nowait((text, received_at))
-            elif self._sensor_capture and text.startswith(("ACCEL ", "HIT ")):
+            elif self._sensor_capture and text.startswith(("ACCEL ", "HIT ", "MOTION_HIT ")):
                 if self._captured_samples.full():
                     try:
                         self._captured_samples.get_nowait()
@@ -605,6 +607,8 @@ class ArduinoController:
             self._last_serial_at = now
             self._serial_line_count += 1
             self._recent_serial.append({"timestamp": time.time(), "line": text})
+            if text.startswith('HIT_TRACE '):
+                self._hit_traces.append({'timestamp': time.time(), 'line': text})
             if text.startswith(('OK ', 'ERROR ')):
                 self._last_ack = text
             if len(parts) == 2 and parts[0] == 'RESET_CAUSE' and parts[1].isdigit():
@@ -613,6 +617,9 @@ class ArduinoController:
                 try:
                     self._last_sensor_values[int(parts[1])] = {'x': int(parts[2]), 'y': int(parts[3]), 'z': int(parts[4]), 'source': 'health_poll'}
                     self._last_sensor_at[int(parts[1])] = now
+                    mole = int(parts[1])
+                    zero = all(int(value) == 0 for value in parts[2:5])
+                    self._sensor_zero_streak[mole] = self._sensor_zero_streak.get(mole, 0) + 1 if zero else 0
                 except ValueError:
                     pass
             if parts[:2] == ['HARDWARE', 'MOLE'] and len(parts) == 7:
@@ -680,6 +687,8 @@ class ArduinoController:
                 'rfid_status_at_last_report': self._rfid_status,
                 'sensors': {str(mole): {'startup_status': self._sensor_status.get(mole, 'UNKNOWN'),
                             'last_values': self._last_sensor_values.get(mole),
+                            'consecutive_zero_health_samples': self._sensor_zero_streak.get(mole, 0),
+                            'suspicious_zero_readings': self._sensor_zero_streak.get(mole, 0) >= 3,
                             'last_sample_age_seconds': (round(now - self._last_sensor_at[mole], 2)
                                                         if mole in self._last_sensor_at else None)}
                             for mole in range(5)},
@@ -691,4 +700,5 @@ class ArduinoController:
                 'event_worker_alive': self.event_worker.is_alive(),
                 'recent_errors': list(self._recent_errors),
                 'recent_serial_lines': list(self._recent_serial),
+                'recent_hit_traces': list(self._hit_traces),
             }

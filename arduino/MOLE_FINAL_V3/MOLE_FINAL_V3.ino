@@ -1,3 +1,4 @@
+// V3: V2 cabinet controls with the verbatim V1 hit-detection implementation.
 #include "firmware_identity.h"
 #ifdef __AVR__
 #include <avr/wdt.h>
@@ -17,21 +18,13 @@ const unsigned long CONTROLLER_LEASE_MS = 5000;
 
 #include <SPI.h>
 
-
-
 #include <Adafruit_NeoPixel.h>
 
 #include <Adafruit_MCP23X17.h>
 
 #include <MFRC522.h>
 
-
-
 #include <math.h>
-
-
-
-
 
 // ============================================================
 
@@ -39,15 +32,11 @@ const unsigned long CONTROLLER_LEASE_MS = 5000;
 
 // ============================================================
 
-
-
 #define MOLE_COUNT 5
 
 #define MOLE_LED_COUNT 21
 
 #define PLAYER_COUNT 6
-
-
 
 #define TCA_ADDRESS 0x70
 
@@ -58,20 +47,12 @@ const unsigned long CONTROLLER_LEASE_MS = 5000;
 // Pin-change ISR/configuration is not enabled yet; polling remains active.
 const uint8_t accelerometerInterruptPin[MOLE_COUNT] = {A8, A9, A10, A11, A12};
 
-
-
-
-const unsigned long SENSOR_INTERVAL = 5;
+const long HIT_REPORT_THRESHOLD = 4000;
+const unsigned long HIT_COOLDOWN = 125;
+const unsigned long SENSOR_INTERVAL = 10;
 const unsigned long RFID_POLL_INTERVAL = 250;
 unsigned long lastRFIDPoll = 0;
 bool rfidReaderAvailable = false;
-const unsigned long RAW_REPORT_INTERVAL = 50;
-const unsigned long PUZZLE_HIT_INTERVAL = 300;
-const unsigned long PUZZLE_ARM_SETTLE = 750;
-const int16_t PUZZLE_HIT_Z = -9000;
-const int16_t PUZZLE_RELEASE_Z = -6400;
-
-
 
 // I2C / main-loop diagnostics.
 
@@ -82,19 +63,11 @@ const unsigned long I2C_TIMEOUT_US = 25000;
 const unsigned long HEARTBEAT_INTERVAL = 1000;
 bool heartbeatEnabled = false;
 
-
-
 unsigned long lastHeartbeat = 0;
 
 unsigned long loopCounter = 0;
 
-// Mechanical movement no longer globally suppresses sensor polling.
-
-// Python/game state decides whether a classified HIT counts.
-
-
-
-
+// V1 performs hit classification; Python applies gameplay rules.
 
 // ============================================================
 
@@ -116,8 +89,6 @@ unsigned long loopCounter = 0;
 
 // ============================================================
 
-
-
 const char* positionName[MOLE_COUNT] = {
 
   "MOLE 0",
@@ -132,17 +103,11 @@ const char* positionName[MOLE_COUNT] = {
 
 };
 
-
-
-
-
 // ============================================================
 
 // ACCELEROMETER / TCA CHANNELS
 
 // ============================================================
-
-
 
 const uint8_t sensorChannel[MOLE_COUNT] = {
 
@@ -158,17 +123,11 @@ const uint8_t sensorChannel[MOLE_COUNT] = {
 
 };
 
-
-
-
-
 // ============================================================
 
 // SOLENOID MCP23017 OUTPUTS
 
 // ============================================================
-
-
 
 const uint8_t solenoidOutput[MOLE_COUNT] = {
 
@@ -184,21 +143,13 @@ const uint8_t solenoidOutput[MOLE_COUNT] = {
 
 };
 
-
-
 Adafruit_MCP23X17 mcp;
-
-
-
-
 
 // ============================================================
 
 // MOLE NEOPIXELS
 
 // ============================================================
-
-
 
 Adafruit_NeoPixel mole0Lights(
 
@@ -210,8 +161,6 @@ Adafruit_NeoPixel mole0Lights(
 
 );
 
-
-
 Adafruit_NeoPixel mole1Lights(
 
   MOLE_LED_COUNT,
@@ -221,8 +170,6 @@ Adafruit_NeoPixel mole1Lights(
   NEO_GRB + NEO_KHZ800
 
 );
-
-
 
 Adafruit_NeoPixel mole2Lights(
 
@@ -234,8 +181,6 @@ Adafruit_NeoPixel mole2Lights(
 
 );
 
-
-
 Adafruit_NeoPixel mole3Lights(
 
   MOLE_LED_COUNT,
@@ -246,8 +191,6 @@ Adafruit_NeoPixel mole3Lights(
 
 );
 
-
-
 Adafruit_NeoPixel mole4Lights(
 
   MOLE_LED_COUNT,
@@ -257,8 +200,6 @@ Adafruit_NeoPixel mole4Lights(
   NEO_GRB + NEO_KHZ800
 
 );
-
-
 
 Adafruit_NeoPixel* lights[MOLE_COUNT] = {
 
@@ -273,10 +214,6 @@ Adafruit_NeoPixel* lights[MOLE_COUNT] = {
   &mole4Lights
 
 };
-
-
-
-
 
 // ============================================================
 
@@ -298,11 +235,7 @@ Adafruit_NeoPixel* lights[MOLE_COUNT] = {
 
 // ============================================================
 
-
-
 #define PLAYER_LIGHT_PIN 6
-
-
 
 Adafruit_NeoPixel playerLights(
 
@@ -313,10 +246,6 @@ Adafruit_NeoPixel playerLights(
   NEO_GRB + NEO_KHZ800
 
 );
-
-
-
-
 
 // ============================================================
 
@@ -346,13 +275,9 @@ Adafruit_NeoPixel playerLightsAlternate(PLAYER_COUNT, 7, NEO_GRB + NEO_KHZ800);
 
 // ============================================================
 
-
-
 #define RFID_SS_PIN 53
 
 #define RFID_RST_PIN 5
-
-
 
 MFRC522 rfid(
 
@@ -362,13 +287,7 @@ MFRC522 rfid(
 
 );
 
-
-
 MFRC522::MIFARE_Key defaultKey;
-
-
-
-
 
 // ============================================================
 
@@ -376,13 +295,9 @@ MFRC522::MIFARE_Key defaultKey;
 
 // ============================================================
 
-
-
 #define TICKET_MOTOR_PIN 22
 
 #define TICKET_SENSOR_PIN 23
-
-
 
 const uint8_t TICKET_MOTOR_ACTIVE = HIGH;
 
@@ -390,31 +305,20 @@ const uint8_t TICKET_MOTOR_INACTIVE = LOW;
 
 const uint8_t TICKET_SENSOR_ACTIVE = LOW;
 
-
-
 const unsigned long TICKET_TIMEOUT_PER_TICKET = 2000;
 
-
-
-
-
 // ============================================================
 
-// HIT DETECTION STATE
+// V1 HIT DETECTION STATE
 
 // ============================================================
-
-
 
 bool hitDetectionEnabled = false;
-
-
-
 unsigned long lastSensorPoll = 0;
+const unsigned long MOLE_MECHANICAL_SUPPRESS_MS = 300;
+unsigned long moleMechanicalSuppressUntil[MOLE_COUNT] = {};
 
 unsigned long lastMechanicalAction = 0;
-
-
 
 unsigned long lastHitTime[MOLE_COUNT] = {
 
@@ -422,26 +326,14 @@ unsigned long lastHitTime[MOLE_COUNT] = {
 
 };
 
-
-
-
-
-
-
 // ============================================================
 
 // SERIAL COMMAND BUFFER
 
 // ============================================================
 
-
-
 String commandBuffer = "";
 bool commandOverflow = false;
-
-
-
-
 
 // ============================================================
 
@@ -464,19 +356,13 @@ void emitHeartbeat() {
 
   unsigned long now = millis();
 
-
-
   if (now - lastHeartbeat < HEARTBEAT_INTERVAL) {
 
     return;
 
   }
 
-
-
   lastHeartbeat = now;
-
-
 
   Serial.print("HEARTBEAT ");
 
@@ -499,10 +385,6 @@ void emitHeartbeat() {
   );
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -536,17 +418,11 @@ void reportI2CTimeoutIfNeeded() {
   }
 }
 
-
-
-
-
 // ============================================================
 
 // TCA9548A
 
 // ============================================================
-
-
 
 bool selectTCAChannel(
 
@@ -554,15 +430,11 @@ bool selectTCAChannel(
 
 ) {
 
-
-
   if (channel > 7) {
 
     return false;
 
   }
-
-
 
   Wire.beginTransmission(
 
@@ -570,31 +442,21 @@ bool selectTCAChannel(
 
   );
 
-
-
   Wire.write(
 
     1 << channel
 
   );
 
-
-
   return Wire.endTransmission() == 0;
 
 }
-
-
-
-
 
 // ============================================================
 
 // MPU REGISTER WRITE
 
 // ============================================================
-
-
 
 bool writeMPURegister(
 
@@ -604,29 +466,19 @@ bool writeMPURegister(
 
 ) {
 
-
-
   Wire.beginTransmission(
 
     MPU_ADDRESS
 
   );
 
-
-
   Wire.write(reg);
 
   Wire.write(value);
 
-
-
   return Wire.endTransmission() == 0;
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -634,23 +486,15 @@ bool writeMPURegister(
 
 // ============================================================
 
-
-
 bool wakeSensor(
 
   uint8_t channel
 
 ) {
 
-
-
   if (!selectTCAChannel(channel)) return false;
 
-
-
   delay(2);
-
-
 
   bool awake = writeMPURegister(
 
@@ -660,16 +504,10 @@ bool wakeSensor(
 
   );
 
-
-
   delay(50);
   return awake;
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -677,31 +515,21 @@ bool wakeSensor(
 
 // ============================================================
 
-
-
 bool sensorExists(
 
   uint8_t channel
 
 ) {
 
-
-
   if (!selectTCAChannel(channel)) return false;
 
-
-
   delay(2);
-
-
 
   Wire.beginTransmission(
 
     MPU_ADDRESS
 
   );
-
-
 
   return (
 
@@ -711,17 +539,11 @@ bool sensorExists(
 
 }
 
-
-
-
-
 // ============================================================
 
 // INITIALIZE SENSORS
 
 // ============================================================
-
-
 
 bool initializeSensorChecked(uint8_t id) {
   const char* step = "MUX_SELECT";
@@ -733,6 +555,7 @@ bool initializeSensorChecked(uint8_t id) {
     Wire.beginTransmission(MPU_ADDRESS); ok = Wire.endTransmission() == 0;
   }
   if (ok) { step = "WAKE_REG_107"; ok = wakeSensor(sensorChannel[id]); }
+  if (ok) { step = "FIFO_DISABLE"; ok = writeMPURegister(0x23, 0) && writeMPURegister(0x6A, 0); }
   if (ok) { step = "RANGE_WRITE_REG_28"; ok = configureAccelerometerRange(sensorChannel[id]); }
   if (ok) {
     step = "RANGE_READBACK_REG_28";
@@ -767,17 +590,11 @@ void initializeSensors() {
   }
 }
 
-
-
-
-
 // ============================================================
 
 // READ ACCELEROMETER
 
 // ============================================================
-
-
 
 bool readAccelerometer(
 
@@ -791,11 +608,7 @@ bool readAccelerometer(
 
 ) {
 
-
-
   if (!selectTCAChannel(channel)) return false;
-
-
 
   Wire.beginTransmission(
 
@@ -803,11 +616,7 @@ bool readAccelerometer(
 
   );
 
-
-
   Wire.write(0x3B);
-
-
 
   if (
 
@@ -823,11 +632,7 @@ bool readAccelerometer(
 
   }
 
-
-
   reportI2CTimeoutIfNeeded();
-
-
 
   Wire.requestFrom(
 
@@ -837,11 +642,7 @@ bool readAccelerometer(
 
   );
 
-
-
   reportI2CTimeoutIfNeeded();
-
-
 
   if (
 
@@ -853,8 +654,6 @@ bool readAccelerometer(
 
   }
 
-
-
   x =
 
     (Wire.read() << 8)
@@ -862,8 +661,6 @@ bool readAccelerometer(
     |
 
     Wire.read();
-
-
 
   y =
 
@@ -873,8 +670,6 @@ bool readAccelerometer(
 
     Wire.read();
 
-
-
   z =
 
     (Wire.read() << 8)
@@ -883,15 +678,9 @@ bool readAccelerometer(
 
     Wire.read();
 
-
-
   return true;
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -909,19 +698,13 @@ bool readAccelerometer(
 
 //
 
-
-
 bool configureAccelerometerRange(
 
   uint8_t channel
 
 ) {
 
-
-
   if (!selectTCAChannel(channel)) return false;
-
-
 
   Wire.beginTransmission(0x68);
 
@@ -931,483 +714,226 @@ bool configureAccelerometerRange(
 
   return Wire.endTransmission() == 0;
 
-
-
 }
-
-
-
-
 
 // ============================================================
 
-// Buffered puzzle detection: 100 Hz per MPU, one 50 ms comparison sweep.
-bool hitDebugEnabled = true;
-bool fifoPolling = false, fifoArmed = false;
-uint8_t fifoConfiguredMask = 0;
-uint8_t fifoNext = 0, fifoValidMask = 0;
-unsigned long fifoStarted = 0, fifoLastPoll = 0;
-const unsigned long FIFO_SLOT_MS = 10;
-long fifoThreshold = 4500;
-uint8_t fifoAxis = 1; // 0=X, 1=Y, 2=Z; compare only this component.
-unsigned long fifoArmDelayMs = 1500;
-unsigned long fifoBaselineStarted[MOLE_COUNT] = {};
-bool fifoCollecting[MOLE_COUNT] = {};
-const unsigned long FIFO_BASELINE_MS = 250;
-long fifoBaseSum[MOLE_COUNT] = {}, fifoBaseline[MOLE_COUNT] = {};
-int16_t fifoBaseMin[MOLE_COUNT] = {}, fifoBaseMax[MOLE_COUNT] = {};
-uint16_t fifoBaseCount[MOLE_COUNT] = {};
-bool fifoSettled[MOLE_COUNT] = {};
-long fifoPeak[MOLE_COUNT] = {};
-uint16_t fifoSamples[MOLE_COUNT] = {};
-bool fifoClipped[MOLE_COUNT] = {};
-
-// Bounded rolling packet history: 20 samples per mole (200 ms at 100 Hz).
-const uint8_t FIFO_TRACE_SAMPLES = 20;
-int16_t fifoTrace[MOLE_COUNT][FIFO_TRACE_SAMPLES][3] = {};
-uint8_t fifoTraceNext[MOLE_COUNT] = {}, fifoTraceSize[MOLE_COUNT] = {};
-unsigned long fifoTraceDumpAt[MOLE_COUNT] = {};
-void dumpFifoTrace(uint8_t id, const char* reason, uint16_t bytes, unsigned long now) {
-  if (!hitDebugEnabled) return;
-  // Repeated invalid reads must not flood the serial link.
-  if (strcmp(reason, "CANDIDATE") != 0 && fifoTraceDumpAt[id]
-      && now - fifoTraceDumpAt[id] < 1000) return;
-  fifoTraceDumpAt[id] = now;
-  Serial.print("HIT_TRACE MOLE "); Serial.print(id);
-  Serial.print(" REASON "); Serial.print(reason);
-  Serial.print(" MS "); Serial.print(now);
-  Serial.print(" MOTION_AGE_MS "); Serial.print(now - lastMechanicalAction);
-  Serial.print(" FIFO_BYTES "); Serial.print(bytes);
-  Serial.print(" REMAINDER "); Serial.print(bytes % 6);
-  Serial.print(" BASE "); Serial.print(fifoBaseline[id]);
-  Serial.print(" PEAK "); Serial.print(fifoPeak[id]);
-  Serial.print(" CLIPPED "); Serial.print(fifoClipped[id]);
-  Serial.print(" AXIS "); Serial.println("XYZ"[fifoAxis]);
-  for (uint8_t n = 0; n < fifoTraceSize[id]; n++) {
-    uint8_t at = (fifoTraceNext[id] + FIFO_TRACE_SAMPLES - fifoTraceSize[id] + n) % FIFO_TRACE_SAMPLES;
-    Serial.print("HIT_TRACE SAMPLE MOLE "); Serial.print(id);
-    Serial.print(" INDEX "); Serial.print(n);
-    Serial.print(" XYZ");
-    for (uint8_t axis = 0; axis < 3; axis++) {
-      Serial.print(" "); Serial.print(fifoTrace[id][at][axis]);
-    }
-    Serial.print(" DELTA "); Serial.println(fifoBaseline[id] - (long)fifoTrace[id][at][fifoAxis]);
-  }
-}
-
-bool readFifoBytes(uint8_t channel, uint8_t reg, uint8_t* data, uint8_t count) {
-  Wire.clearWireTimeoutFlag();
-  if (!selectTCAChannel(channel)) return false;
-  Wire.beginTransmission(MPU_ADDRESS); Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) { reportI2CTimeoutIfNeeded(); return false; }
-  Wire.requestFrom((uint8_t)MPU_ADDRESS, count);
-  if (Wire.getWireTimeoutFlag() || Wire.available() != count) {
-    reportI2CTimeoutIfNeeded(); return false;
-  }
-  for (uint8_t i = 0; i < count; i++) data[i] = Wire.read();
-  return true;
-}
-
-bool resetSensorFifo(uint8_t id, bool collect = false) {
-  uint8_t count[2];
-  // Disable sample admission before resetting; verify empty before enabling.
-  if (!selectTCAChannel(sensorChannel[id]) || !writeMPURegister(0x23, 0)
-      || !writeMPURegister(0x6A, 0) || !writeMPURegister(0x6A, 0x04)
-      || !readFifoBytes(sensorChannel[id], 0x72, count, 2)
-      || count[0] != 0 || count[1] != 0) return false;
-  if (hitDebugEnabled) {
-    Serial.print("HIT_DEBUG FIFO CLEARED MOLE "); Serial.print(id);
-    Serial.println(" BYTES 0");
-  }
-  return writeMPURegister(0x6A, 0x40) && (!collect || writeMPURegister(0x23, 0x08));
-}
-
-// Kept as the common cleanup hook used by SAFE STOP, lease and recovery.
-void stopFifoPolling() {
-  if (!fifoPolling) return;
-  fifoPolling = false; fifoArmed = false;
-  for (uint8_t id = 0; id < MOLE_COUNT; id++) {
-    if (selectTCAChannel(sensorChannel[id])) {
-      bool cleared = resetSensorFifo(id);
-      writeMPURegister(0x6A, 0);
-      if (!cleared) {
-        Serial.print("HIT_DEBUG FIFO CLEAR_FAILED MOLE "); Serial.println(id);
-      }
-    }
-  }
-}
-
-bool configureFifoSensor(uint8_t id, uint8_t& failedReg, uint8_t& actual) {
-  failedReg = 0x75;
-  if (!readFifoBytes(sensorChannel[id], failedReg, &actual, 1) || actual != 0x68) return false;
-  // Preserve the existing internal clock; no PLL switch on each puzzle rearm.
-  const uint8_t regs[] = {0x38, 0x23, 0x6B, 0x6C, 0x19, 0x1A, 0x1C};
-  const uint8_t values[] = {0, 0, 0, 0, 9, 1, 0x18};
-  for (uint8_t i = 0; i < sizeof(regs); i++) {
-    failedReg = regs[i]; actual = 255;
-    if (!selectTCAChannel(sensorChannel[id]) || !writeMPURegister(regs[i], values[i])) return false;
-    delay(regs[i] == 0x6B ? 50 : 2);
-    if (!readFifoBytes(sensorChannel[id], regs[i], &actual, 1) || actual != values[i]) return false;
-  }
-  return true;
-}
-
-bool enableFifoPolling(long threshold, unsigned long armDelayMs = 1500, uint8_t axis = 1) {
-  stopFifoPolling(); hitDetectionEnabled = false;
-  fifoPolling = true; fifoArmed = false; fifoThreshold = threshold; fifoArmDelayMs = armDelayMs; fifoAxis = axis;
-  for (uint8_t id = 0; id < MOLE_COUNT; id++) {
-    bool configured = false;
-    uint8_t failedReg = 0, actual = 255;
-    for (uint8_t attempt = 1; attempt <= 3; attempt++) {
-      Wire.clearWireTimeoutFlag();
-      bool ok = true;
-      if (!(fifoConfiguredMask & (1 << id))) {
-        ok = configureFifoSensor(id, failedReg, actual);
-        if (ok) fifoConfiguredMask |= (1 << id);
-      }
-      if (ok) {
-        failedReg = 0x6A;
-        ok = resetSensorFifo(id);
-      }
-      if (ok) {
-        failedReg = 0x23;
-        ok = selectTCAChannel(sensorChannel[id]) && writeMPURegister(0x23, 0)
-          && readFifoBytes(sensorChannel[id], 0x23, &actual, 1) && actual == 0;
-      }
-      if (ok) { configured = true; break; }
-      fifoConfiguredMask &= ~(1 << id);
-      Serial.print("FIFO_CONFIG_RETRY MOLE "); Serial.print(id);
-      Serial.print(" ATTEMPT "); Serial.print(attempt);
-      Serial.print(" REGISTER "); Serial.print(failedReg);
-      Serial.print(" ACTUAL "); Serial.println(actual);
-      if (attempt < 3) delay(10);
-    }
-    if (!configured) {
-      stopFifoPolling(); commandFailed = true;
-      Serial.print("ERROR FIFO CONFIG MOLE "); Serial.print(id);
-      Serial.print(" REGISTER "); Serial.print(failedReg);
-      Serial.print(" ACTUAL "); Serial.println(actual); return false;
-    }
-    fifoCollecting[id] = false;
-    fifoBaseSum[id] = 0; fifoBaseCount[id] = 0; fifoSettled[id] = false;
-    fifoPeak[id] = 0; fifoSamples[id] = 0; fifoClipped[id] = false;
-  }
-  fifoNext = 0; fifoValidMask = 0; fifoStarted = millis(); fifoLastPoll = millis();
-  if (hitDebugEnabled) {
-    Serial.print("HIT_DEBUG FIFO ARM DELAY_MS "); Serial.print(fifoArmDelayMs);
-    Serial.print(" AXIS "); Serial.print("XYZ"[fifoAxis]);
-    Serial.print(" BASELINE_MS "); Serial.print(FIFO_BASELINE_MS);
-    Serial.print(" THRESHOLD "); Serial.println(fifoThreshold);
-  }
-  fifoArmed = true; return true;
-}
-
-void restartFifoSettlingAfterMotion() {
-  if (!fifoPolling || !fifoArmed) return;
-  for (uint8_t id = 0; id < MOLE_COUNT; id++) {
-    if (selectTCAChannel(sensorChannel[id])) writeMPURegister(0x23, 0);
-    fifoCollecting[id] = false; fifoSettled[id] = false;
-    fifoBaseSum[id] = 0; fifoBaseCount[id] = 0; fifoPeak[id] = 0;
-  }
-  fifoNext = 0; fifoValidMask = 0; fifoStarted = millis(); fifoLastPoll = millis();
-  if (hitDebugEnabled) Serial.println("HIT_DEBUG FIFO SETTLING_RESTART PNEUMATIC_COMMAND");
-}
-
-void checkFifoHits() {
-  if (!fifoPolling || !fifoArmed) return;
-  unsigned long now = millis();
-  // No FIFO collection or sensor polling during pneumatic settling.
-  if (now - fifoStarted < fifoArmDelayMs || now - fifoLastPoll < FIFO_SLOT_MS) return;
-  fifoLastPoll = now;
-  uint8_t id = fifoNext; fifoNext = (fifoNext + 1) % MOLE_COUNT;
-  if (!fifoCollecting[id]) {
-    if (!resetSensorFifo(id) || !writeMPURegister(0x23, 0x08)) return;
-    fifoTraceNext[id] = fifoTraceSize[id] = 0;
-    fifoCollecting[id] = true; fifoBaselineStarted[id] = now;
-    return;
-  }
-  uint8_t bytes[30], status;
-  bool valid = readFifoBytes(sensorChannel[id], 0x3A, &status, 1)
-    && readFifoBytes(sensorChannel[id], 0x72, bytes, 2);
-  uint16_t count = valid ? ((uint16_t)bytes[0] << 8) | bytes[1] : 0;
-  if (!valid || (status & 0x10) || count >= 1024 || count > 120) {
-    dumpFifoTrace(id, valid ? "OVERFLOW_OR_BACKLOG" : "READ_ERROR", count, now);
-    Serial.print("HIT_DEBUG FIFO LOST MOLE "); Serial.print(id);
-    Serial.println(valid ? " OVERFLOW_OR_BACKLOG" : " READ_ERROR");
-    if (!resetSensorFifo(id, true)) fifoCollecting[id] = false;
-    valid = false;
-  }
-  fifoPeak[id] = 0; fifoSamples[id] = 0; fifoClipped[id] = false;
-  // Drain complete packets in <=30 byte bursts (AVR Wire buffer is 32 bytes).
-  bool quietResetLogged = false;
-  uint16_t remaining = count / 6;
-  while (valid && remaining) {
-    uint8_t packets = remaining > 5 ? 5 : remaining;
-    if (!readFifoBytes(sensorChannel[id], 0x74, bytes, packets * 6)) {
-      dumpFifoTrace(id, "PACKET_READ_ERROR", count, now);
-      valid = false;
-      if (!resetSensorFifo(id, true)) fifoCollecting[id] = false;
-      break;
-    }
-    for (uint8_t i = 0; i < packets; i++) {
-      uint8_t at = fifoTraceNext[id];
-      for (uint8_t axis = 0; axis < 3; axis++) {
-        uint8_t pos = i * 6 + axis * 2;
-        fifoTrace[id][at][axis] = (int16_t)(((uint16_t)bytes[pos] << 8) | bytes[pos + 1]);
-      }
-      fifoTraceNext[id] = (at + 1) % FIFO_TRACE_SAMPLES;
-      if (fifoTraceSize[id] < FIFO_TRACE_SAMPLES) fifoTraceSize[id]++;
-      uint8_t offset = i * 6 + fifoAxis * 2;
-      int16_t z = (int16_t)(((uint16_t)bytes[offset] << 8) | bytes[offset + 1]);
-      fifoSamples[id]++;
-      if (z == -32768 || z == 32767) fifoClipped[id] = true;
-      // Collect a fresh baseline only after the pneumatic settling delay.
-      if (!fifoSettled[id]) {
-        long quietLimit = fifoThreshold / 4;
-        if (quietLimit > 1000) quietLimit = 1000;
-        if (quietLimit < 32) quietLimit = 32;
-        if (!fifoBaseCount[id]) fifoBaseMin[id] = fifoBaseMax[id] = z;
-        if (z < fifoBaseMin[id]) fifoBaseMin[id] = z;
-        if (z > fifoBaseMax[id]) fifoBaseMax[id] = z;
-        if ((long)fifoBaseMax[id] - fifoBaseMin[id] > quietLimit || fifoClipped[id]) {
-          // A moving/clipped window is not a resting baseline. Start over.
-          fifoBaseCount[id] = 0; fifoBaseSum[id] = 0;
-          fifoBaseMin[id] = fifoBaseMax[id] = z; fifoBaselineStarted[id] = now;
-          if (hitDebugEnabled && !quietResetLogged) {
-            quietResetLogged = true;
-            Serial.print("HIT_DEBUG FIFO WAIT_QUIET MOLE "); Serial.print(id);
-            Serial.print(" AXIS "); Serial.print("XYZ"[fifoAxis]);
-            Serial.print(" VALUE "); Serial.print(z);
-            Serial.print(" QUIET_LIMIT "); Serial.println(quietLimit);
-          }
-        }
-        fifoBaseSum[id] += z; fifoBaseCount[id]++;
-      } else {
-        long strength = fifoBaseline[id] - (long)z;
-        if (strength > fifoPeak[id]) fifoPeak[id] = strength;
-      }
-    }
-    remaining -= packets;
-  }
-  if (!valid && !fifoSettled[id]) {
-    fifoBaseSum[id] = 0; fifoBaseCount[id] = 0; fifoBaselineStarted[id] = now;
-  }
-  if (valid && !fifoSettled[id] && now - fifoBaselineStarted[id] >= FIFO_BASELINE_MS) {
-    if (fifoBaseCount[id] >= 10) {
-      fifoBaseline[id] = fifoBaseSum[id] / fifoBaseCount[id];
-      fifoSettled[id] = true;
-      if (hitDebugEnabled) {
-        Serial.print("HIT_DEBUG FIFO BASE MOLE "); Serial.print(id);
-        Serial.print(" AXIS "); Serial.print("XYZ"[fifoAxis]);
-            Serial.print(" VALUE "); Serial.print(fifoBaseline[id]);
-        Serial.print(" SAMPLES "); Serial.println(fifoBaseCount[id]);
-      }
-    } else {
-      Serial.print("ERROR FIFO BASELINE MOLE "); Serial.println(id);
-      fifoArmed = false; return;
-    }
-    valid = false; // Discard samples captured before the settling boundary.
-  }
-  if (valid && fifoSettled[id] && fifoPeak[id] >= fifoThreshold)
-    dumpFifoTrace(id, "CANDIDATE", count, now);
-  if (valid && fifoSettled[id] && fifoSamples[id]) fifoValidMask |= (1 << id);
-  if (fifoNext != 0) return;
-  int winner = -1; long strongest = 0;
-  if (fifoValidMask == 0x1F) {
-    for (uint8_t mole = 0; mole < MOLE_COUNT; mole++) {
-      if (fifoPeak[mole] >= fifoThreshold && fifoPeak[mole] > strongest) {
-        winner = mole; strongest = fifoPeak[mole];
-      }
-    }
-  }
-  if (hitDebugEnabled) {
-    Serial.print("HIT_DEBUG FIFO SWEEP MS "); Serial.print(now);
-    Serial.print(" VALID_MASK "); Serial.print(fifoValidMask);
-    Serial.print(" AXIS "); Serial.print("XYZ"[fifoAxis]);
-    Serial.print(" PEAKS");
-    for (uint8_t mole = 0; mole < MOLE_COUNT; mole++) { Serial.print(" "); Serial.print(fifoPeak[mole]); }
-    Serial.print(" SAMPLES");
-    for (uint8_t mole = 0; mole < MOLE_COUNT; mole++) { Serial.print(" "); Serial.print(fifoSamples[mole]); }
-    Serial.print(" CLIPPED_MASK ");
-    uint8_t clippedMask = 0;
-    for (uint8_t mole = 0; mole < MOLE_COUNT; mole++) if (fifoClipped[mole]) clippedMask |= (1 << mole);
-    Serial.print(clippedMask);
-    Serial.print(" WINNER "); Serial.print(winner);
-    Serial.print(" THRESHOLD "); Serial.println(fifoThreshold);
-  }
-  fifoValidMask = 0;
-  if (winner >= 0) {
-    fifoArmed = false;
-    Serial.print("HIT "); Serial.print(winner); Serial.print(" ");
-    Serial.print(sensorChannel[winner]); Serial.print(" "); Serial.println(strongest);
-  }
-}
-
-// SENSOR MODES
-// ============================================================
-// SENSORS PUZZLE: staggered 25 ms per-sensor polling, one downward HIT, then disarm.
-// SENSORS ENABLE: staggered 25 ms per-sensor polling, peak-preserving ACCEL reports every 50 ms.
-// Both modes use the same physical sensor mapping. Python owns game rules.
-// SENSORS DISABLE: stop polling/reporting.
-// HIT <mole> <mux_channel> <positive downward strength>
-// ACCEL <mole> <mux_channel> <x> <y> <z>
-
-// PUZZLE: poll frequently, emit one HIT, wait for explicit Python re-arm.
-// RAW: poll one sensor every 5 ms, report the most negative sample in each 50 ms
-// window so reducing serial traffic does not discard brief downward strikes.
-uint8_t nextSensorToPoll = 0;
-bool sensorSampleValid[MOLE_COUNT] = {};
-unsigned long sensorSampleAt[MOLE_COUNT] = {};
-int16_t sensorSampleX[MOLE_COUNT], sensorSampleY[MOLE_COUNT], sensorSampleZ[MOLE_COUNT];
-bool puzzleSensorMode = false;
-bool puzzleHitArmed = false;
-bool puzzleLatched[MOLE_COUNT] = {false, false, false, false, false};
-uint8_t puzzleSweepValid = 0, puzzleSweepEligible = 0;
-int puzzleSweepWinner = -1;
-int16_t puzzleSweepZ = 0;
-bool puzzleHasHit = false;
-unsigned long lastPuzzleHit = 0;
-unsigned long puzzleArmStart = 0;
-unsigned long lastRawReport = 0;
-bool rawPeakValid[MOLE_COUNT] = {false, false, false, false, false};
-int16_t rawPeakX[MOLE_COUNT], rawPeakY[MOLE_COUNT], rawPeakZ[MOLE_COUNT];
-
-unsigned long lastPuzzleDiagnostic = 0;
-unsigned long puzzleReads[MOLE_COUNT] = {0, 0, 0, 0, 0};
-unsigned long puzzleFailures[MOLE_COUNT] = {0, 0, 0, 0, 0};
-int16_t puzzleMinZ[MOLE_COUNT] = {32767, 32767, 32767, 32767, 32767};
-int16_t puzzleMaxZ[MOLE_COUNT] = {-32768, -32768, -32768, -32768, -32768};
-
-void emitPuzzleDiagnostics(unsigned long now) {
-  if (now - lastPuzzleDiagnostic < 1000) return;
-  lastPuzzleDiagnostic = now;
-  for (int mole = 0; mole < MOLE_COUNT; mole++) {
-    Serial.print("PUZZLE_DIAG MOLE "); Serial.print(mole);
-    Serial.print(" ARMED "); Serial.print(puzzleHitArmed ? 1 : 0);
-    Serial.print(" LATCHED "); Serial.print(puzzleLatched[mole] ? 1 : 0);
-    Serial.print(" READS "); Serial.print(puzzleReads[mole]);
-    Serial.print(" FAILURES "); Serial.print(puzzleFailures[mole]);
-    Serial.print(" MIN_Z "); Serial.print(puzzleMinZ[mole]);
-    Serial.print(" MAX_Z "); Serial.println(puzzleMaxZ[mole]);
-    puzzleReads[mole] = 0;
-    puzzleFailures[mole] = 0;
-    puzzleMinZ[mole] = 32767;
-    puzzleMaxZ[mole] = -32768;
-  }
-}
-
-void enableSensorMode(bool puzzle) {
-  puzzleSweepValid = 0; puzzleSweepEligible = 0;
-  puzzleSweepWinner = -1;
-  puzzleSweepZ = 0;
-  puzzleSensorMode = puzzle;
-  puzzleHitArmed = puzzle;
-  if (puzzle) {
-    puzzleArmStart = millis();
-    // Each sensor must return to rest AFTER mechanical settling.
-    for (int mole = 0; mole < MOLE_COUNT; mole++) puzzleLatched[mole] = true;
-  }
-  hitDetectionEnabled = true;
-  nextSensorToPoll = 0;
-  lastRawReport = millis();
-  lastPuzzleDiagnostic = lastRawReport;
-  for (int mole = 0; mole < MOLE_COUNT; mole++) {
-    rawPeakValid[mole] = false;
-    puzzleReads[mole] = 0;
-    puzzleFailures[mole] = 0;
-    puzzleMinZ[mole] = 32767;
-    puzzleMaxZ[mole] = -32768;
-  }
-}
+// V1 hit acquisition and classification, copied verbatim from MOLE_FINAL_V1.
+// Health samples are separate and do not participate in impact capture.
+void enableSensorReporting() { hitDetectionEnabled = true; }
 
 void checkForHits() {
-  if (!hitDetectionEnabled) return;
-  unsigned long now = millis();
-  if (now - lastSensorPoll < SENSOR_INTERVAL) return;
-  lastSensorPoll = now;
-  if (puzzleSensorMode && !puzzleHitArmed) return;
-  // Keep a candidate until all five scheduler slots have been visited.
-  bool settled = !puzzleSensorMode || now - puzzleArmStart >= PUZZLE_ARM_SETTLE;
-  bool intervalReady = settled && (!puzzleHasHit || now - lastPuzzleHit >= PUZZLE_HIT_INTERVAL);
-  int mole = nextSensorToPoll;
-  nextSensorToPoll = (nextSensorToPoll + 1) % MOLE_COUNT;
-  {
-    int16_t x, y, z;
-    if (!readAccelerometer(sensorChannel[mole], x, y, z)) {
-      if (puzzleSensorMode) puzzleFailures[mole]++;
-      sensorSampleValid[mole] = false;
-    } else {
-    puzzleSweepValid |= (1 << mole);
-    sensorSampleValid[mole] = true;
-    sensorSampleAt[mole] = now;
-    sensorSampleX[mole] = x; sensorSampleY[mole] = y; sensorSampleZ[mole] = z;
-    if (puzzleSensorMode) {
-      puzzleReads[mole]++;
-      if (z < puzzleMinZ[mole]) puzzleMinZ[mole] = z;
-      if (z > puzzleMaxZ[mole]) puzzleMaxZ[mole] = z;
-    }
-    if (settled && z > PUZZLE_RELEASE_Z) puzzleLatched[mole] = false;
-    if (puzzleSensorMode) {
-      bool eligible = puzzleHitArmed && intervalReady && !puzzleLatched[mole] && z <= PUZZLE_HIT_Z;
-      if (eligible) puzzleSweepEligible |= (1 << mole);
-      if (eligible && (puzzleSweepWinner < 0 || z < puzzleSweepZ)) {
-        puzzleSweepWinner = mole;
-        puzzleSweepZ = z;
-      }
-    } else if (!rawPeakValid[mole] || z < rawPeakZ[mole]) {
-      rawPeakValid[mole] = true;
-      rawPeakX[mole] = x;
-      rawPeakY[mole] = y;
-      rawPeakZ[mole] = z;
-    }
-  }
-  } // Successful sensor read.
-  if (puzzleSensorMode) {
-    if (nextSensorToPoll == 0 && hitDebugEnabled) {
-      Serial.print("HIT_DEBUG SWEEP MS "); Serial.print(now);
-      Serial.print(" VALID_MASK "); Serial.print(puzzleSweepValid);
-      Serial.print(" ELIGIBLE_MASK "); Serial.print(puzzleSweepEligible);
-      Serial.print(" Z");
-      for (int id = 0; id < MOLE_COUNT; id++) {
-        Serial.print(" ");
-        if (puzzleSweepValid & (1 << id)) Serial.print(sensorSampleZ[id]);
-        else Serial.print("NA");
-      }
-      Serial.print(" WINNER "); Serial.print(puzzleSweepWinner);
-      Serial.print(" STRENGTH "); Serial.println(puzzleSweepWinner < 0 ? 0 : -(long)puzzleSweepZ);
-    }
-    if (nextSensorToPoll == 0 && puzzleSweepWinner >= 0) {
-      puzzleHitArmed = false;
-      puzzleLatched[puzzleSweepWinner] = true;
-      puzzleHasHit = true;
-      lastPuzzleHit = now;
-      Serial.print("HIT ");
-      Serial.print(puzzleSweepWinner);
-      Serial.print(" ");
-      Serial.print(sensorChannel[puzzleSweepWinner]);
-      Serial.print(" ");
-      Serial.println(-(long)puzzleSweepZ);
-    }
-    if (nextSensorToPoll == 0) { puzzleSweepWinner = -1; puzzleSweepZ = 0; puzzleSweepValid = 0; puzzleSweepEligible = 0; }
-    emitPuzzleDiagnostics(now);
+
+  if (!hitDetectionEnabled) {
     return;
   }
-  if (now - lastRawReport < RAW_REPORT_INTERVAL) return;
-  lastRawReport = now;
-  for (int mole = 0; mole < MOLE_COUNT; mole++) {
-    if (!rawPeakValid[mole]) continue;
-    Serial.print("ACCEL ");
-    Serial.print(mole);
-    Serial.print(" ");
-    Serial.print(sensorChannel[mole]);
-    Serial.print(" ");
-    Serial.print(rawPeakX[mole]);
-    Serial.print(" ");
-    Serial.print(rawPeakY[mole]);
-    Serial.print(" ");
-    Serial.println(rawPeakZ[mole]);
-    rawPeakValid[mole] = false;
+
+  unsigned long now = millis();
+
+  if (
+    now - lastSensorPoll
+    < SENSOR_INTERVAL
+  ) {
+    return;
   }
+
+  lastSensorPoll = now;
+
+  // ----------------------------------------------------------
+  // Detect the beginning of a physical impact.
+  // ----------------------------------------------------------
+
+  bool impactTriggered = false;
+
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+
+    if ((long)(moleMechanicalSuppressUntil[mole] - now) > 0) {
+      continue;
+    }
+
+    int16_t x;
+    int16_t y;
+    int16_t z;
+
+    if (!readAccelerometer(sensorChannel[mole], x, y, z)) {
+      continue;
+    }
+
+    long strongestAxis = max(
+      abs((long)x),
+      max(abs((long)y), abs((long)z))
+    );
+
+    if (strongestAxis >= HIT_REPORT_THRESHOLD) {
+      impactTriggered = true;
+      break;
+    }
+  }
+
+  if (!impactTriggered) {
+    return;
+  }
+
+
+  // ----------------------------------------------------------
+  // Capture all five sensors for one 75 ms physical-impact window.
+  // ----------------------------------------------------------
+
+  int16_t minX[MOLE_COUNT];
+  int16_t maxX[MOLE_COUNT];
+  int16_t minY[MOLE_COUNT];
+  int16_t maxY[MOLE_COUNT];
+  int16_t minZ[MOLE_COUNT];
+  int16_t maxZ[MOLE_COUNT];
+
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    minX[mole] = 32767;
+    maxX[mole] = -32768;
+    minY[mole] = 32767;
+    maxY[mole] = -32768;
+    minZ[mole] = 32767;
+    maxZ[mole] = -32768;
+  }
+
+  const unsigned long IMPACT_CAPTURE_MS = 15;
+  unsigned long captureStart = millis();
+
+  while (millis() - captureStart < IMPACT_CAPTURE_MS) {
+
+    for (int mole = 0; mole < MOLE_COUNT; mole++) {
+
+      int16_t x;
+      int16_t y;
+      int16_t z;
+
+      if (!readAccelerometer(sensorChannel[mole], x, y, z)) {
+        continue;
+      }
+
+      if (x < minX[mole]) minX[mole] = x;
+      if (x > maxX[mole]) maxX[mole] = x;
+      if (y < minY[mole]) minY[mole] = y;
+      if (y > maxY[mole]) maxY[mole] = y;
+      if (z < minZ[mole]) minZ[mole] = z;
+      if (z > maxZ[mole]) maxZ[mole] = z;
+    }
+  }
+
+
+  // ----------------------------------------------------------
+  // Score each mole by its largest directional range.
+  //
+  // score = max(
+  //   maxX - minX,
+  //   maxY - minY,
+  //   maxZ - minZ
+  // )
+  //
+  // The struck mole should have the largest local movement over
+  // the complete impact rather than merely the largest instantaneous
+  // cabinet vibration.
+  // ----------------------------------------------------------
+
+  long scores[MOLE_COUNT];
+
+  int winner = -1;
+  long winnerScore = -1;
+  long runnerUpScore = -1;
+
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+
+    if ((long)(moleMechanicalSuppressUntil[mole] - millis()) > 0) {
+      scores[mole] = -1;
+      continue;
+    }
+
+    long xRange =
+      (long)maxX[mole] - (long)minX[mole];
+
+    long yRange =
+      (long)maxY[mole] - (long)minY[mole];
+
+    long zRange =
+      (long)maxZ[mole] - (long)minZ[mole];
+
+    scores[mole] = max(
+      xRange,
+      max(yRange, zRange)
+    );
+
+    if (scores[mole] > winnerScore) {
+
+      runnerUpScore = winnerScore;
+      winnerScore = scores[mole];
+      winner = mole;
+
+    } else if (scores[mole] > runnerUpScore) {
+
+      runnerUpScore = scores[mole];
+    }
+  }
+
+
+  // Keep diagnostics visible while we tune classification.
+  Serial.print("SCORES");
+
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    Serial.print(" ");
+    Serial.print(mole);
+    Serial.print(":");
+    Serial.print(scores[mole]);
+  }
+
+  Serial.println();
+
+
+  // ----------------------------------------------------------
+  // Classification requirements.
+  //
+  // 1. Winner must show at least 10,000 counts of directional travel.
+  // 2. Winner must beat runner-up by at least 15%.
+  // ----------------------------------------------------------
+
+  const long MIN_HIT_SCORE = 10000;
+
+  bool strongEnough =
+    winnerScore >= MIN_HIT_SCORE;
+
+  bool clearWinner =
+    runnerUpScore <= 0
+    ||
+    winnerScore * 100L
+      >= runnerUpScore * 115L;
+
+
+  if (
+    winner >= 0
+    &&
+    strongEnough
+    &&
+    clearWinner
+  ) {
+
+    Serial.print("HIT ");
+    Serial.print(winner);
+    Serial.print(" ");
+    Serial.print(sensorChannel[winner]);
+    Serial.print(" ");
+    Serial.println(winnerScore);
+
+  } else {
+
+    Serial.print("IMPACT_REJECTED winner=");
+    Serial.print(winner);
+    Serial.print(" score=");
+    Serial.print(winnerScore);
+    Serial.print(" runnerup=");
+    Serial.println(runnerUpScore);
+  }
+
+
+  // Treat ringing from this capture as part of the same strike.
+  delay(HIT_COOLDOWN);
 }
 
 
@@ -1417,8 +943,6 @@ void checkForHits() {
 
 // ============================================================
 
-
-
 void setMole(
 
   int mole,
@@ -1426,8 +950,6 @@ void setMole(
   bool up
 
 ) {
-
-
 
   if (
 
@@ -1443,10 +965,6 @@ void setMole(
 
   }
 
-
-
-
-
   if (!mcpReady) { commandFailed = true; Serial.println("ERROR MCP NOT READY"); return; }
   mcp.digitalWrite(
 
@@ -1456,19 +974,14 @@ void setMole(
 
   );
 
-
-
   if (mcp.digitalRead(solenoidOutput[mole]) != (up ? HIGH : LOW)) {
     commandFailed = true; mcpReady = false; stopOutputsPending = true; Serial.println("ERROR OUTPUT READBACK FAILED");
   }
-  lastMechanicalAction = millis();
-  restartFifoSettlingAfterMotion();
+  unsigned long movementTime = millis();
+  moleMechanicalSuppressUntil[mole] = movementTime + MOLE_MECHANICAL_SUPPRESS_MS;
+  lastMechanicalAction = movementTime;
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -1476,15 +989,11 @@ void setMole(
 
 // ============================================================
 
-
-
 void setAllMoles(
 
   bool up
 
 ) {
-
-
 
   for (
 
@@ -1496,8 +1005,6 @@ void setAllMoles(
 
   ) {
 
-
-
     mcp.digitalWrite(
 
       solenoidOutput[mole],
@@ -1508,24 +1015,19 @@ void setAllMoles(
 
   }
 
-
-
-  lastMechanicalAction = millis();
-  restartFifoSettlingAfterMotion();
+  unsigned long movementTime = millis();
+  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+    moleMechanicalSuppressUntil[mole] = movementTime + MOLE_MECHANICAL_SUPPRESS_MS;
+  }
+  lastMechanicalAction = movementTime;
 
 }
-
-
-
-
 
 // ============================================================
 
 // MOLE LIGHT
 
 // ============================================================
-
-
 
 void setMoleLight(
 
@@ -1539,8 +1041,6 @@ void setMoleLight(
 
 ) {
 
-
-
   if (
 
     mole < 0
@@ -1554,10 +1054,6 @@ void setMoleLight(
     return;
 
   }
-
-
-
-
 
   uint32_t color =
 
@@ -1571,10 +1067,6 @@ void setMoleLight(
 
     );
 
-
-
-
-
   for (
 
     int pixel = 0;
@@ -1584,8 +1076,6 @@ void setMoleLight(
     pixel++
 
   ) {
-
-
 
     lights[mole]->setPixelColor(
 
@@ -1597,17 +1087,9 @@ void setMoleLight(
 
   }
 
-
-
-
-
   lights[mole]->show();
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -1615,15 +1097,11 @@ void setMoleLight(
 
 // ============================================================
 
-
-
 void turnMoleLightOff(
 
   int mole
 
 ) {
-
-
 
   if (
 
@@ -1639,19 +1117,11 @@ void turnMoleLightOff(
 
   }
 
-
-
-
-
   lights[mole]->clear();
 
   lights[mole]->show();
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -1659,11 +1129,7 @@ void turnMoleLightOff(
 
 // ============================================================
 
-
-
 void turnAllMoleLightsOff() {
-
-
 
   for (
 
@@ -1675,8 +1141,6 @@ void turnAllMoleLightsOff() {
 
   ) {
 
-
-
     lights[mole]->clear();
 
     lights[mole]->show();
@@ -1685,17 +1149,11 @@ void turnAllMoleLightsOff() {
 
 }
 
-
-
-
-
 // ============================================================
 
 // PLAYER LIGHT
 
 // ============================================================
-
-
 
 // Mirror one six-pixel buffer to both pins, allowing a D6/D7 wiring fallback.
 void showPlayerLights() {
@@ -1716,8 +1174,6 @@ void setPlayerLight(
 
 ) {
 
-
-
   if (
 
     player < 0
@@ -1731,10 +1187,6 @@ void setPlayerLight(
     return;
 
   }
-
-
-
-
 
   playerLights.setPixelColor(
 
@@ -1752,17 +1204,9 @@ void setPlayerLight(
 
   );
 
-
-
-
-
   showPlayerLights();
 
 }
-
-
-
-
 
 void setPlayerOff(
 
@@ -1770,8 +1214,6 @@ void setPlayerOff(
 
 ) {
 
-
-
   setPlayerLight(
 
     player,
@@ -1785,10 +1227,6 @@ void setPlayerOff(
   );
 
 }
-
-
-
-
 
 void setPlayerYellow(
 
@@ -1796,8 +1234,6 @@ void setPlayerYellow(
 
 ) {
 
-
-
   setPlayerLight(
 
     player,
@@ -1812,17 +1248,11 @@ void setPlayerYellow(
 
 }
 
-
-
-
-
 void setPlayerGreen(
 
   int player
 
 ) {
-
-
 
   setPlayerLight(
 
@@ -1838,25 +1268,13 @@ void setPlayerGreen(
 
 }
 
-
-
-
-
 void clearPlayerLights() {
 
-
-
   playerLights.clear();
-
-
 
   showPlayerLights();
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -1864,15 +1282,11 @@ void clearPlayerLights() {
 
 // ============================================================
 
-
-
 void printHexByte(
 
   byte value
 
 ) {
-
-
 
   if (
 
@@ -1884,8 +1298,6 @@ void printHexByte(
 
   }
 
-
-
   Serial.print(
 
     value,
@@ -1896,31 +1308,19 @@ void printHexByte(
 
 }
 
-
-
-
-
 // ============================================================
 
 // RFID UID
 
 // ============================================================
 
-
-
 void printRFIDUID() {
-
-
 
   Serial.print(
 
     "RFID_DIAG UID "
 
   );
-
-
-
-
 
   for (
 
@@ -1932,17 +1332,11 @@ void printRFIDUID() {
 
   ) {
 
-
-
     printHexByte(
 
       rfid.uid.uidByte[i]
 
     );
-
-
-
-
 
     if (
 
@@ -1950,33 +1344,21 @@ void printRFIDUID() {
 
     ) {
 
-
-
       Serial.print(":");
 
     }
 
   }
 
-
-
-
-
   Serial.println();
 
 }
-
-
-
-
 
 // ============================================================
 
 // RFID DATA
 
 // ============================================================
-
-
 
 void printRFIDData(
 
@@ -1986,17 +1368,11 @@ void printRFIDData(
 
 ) {
 
-
-
   Serial.print(
 
     "RFID_DIAG DATA HEX "
 
   );
-
-
-
-
 
   for (
 
@@ -2007,8 +1383,6 @@ void printRFIDData(
     i++
 
   ) {
-
-
 
     printHexByte(
 
@@ -2016,31 +1390,17 @@ void printRFIDData(
 
     );
 
-
-
     Serial.print(" ");
 
   }
 
-
-
-
-
   Serial.println();
-
-
-
-
 
   Serial.print(
 
     "RFID_DIAG DATA ASCII "
 
   );
-
-
-
-
 
   for (
 
@@ -2052,15 +1412,9 @@ void printRFIDData(
 
   ) {
 
-
-
     char c =
 
       (char)buffer[i];
-
-
-
-
 
     if (
 
@@ -2072,15 +1426,9 @@ void printRFIDData(
 
     ) {
 
-
-
       Serial.print(c);
 
-
-
     } else {
-
-
 
       Serial.print(".");
 
@@ -2088,17 +1436,9 @@ void printRFIDData(
 
   }
 
-
-
-
-
   Serial.println();
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -2114,15 +1454,11 @@ void printRFIDData(
 
 // ============================================================
 
-
-
 bool emitPlayerID(
 
   byte* buffer
 
 ) {
-
-
 
   if (
 
@@ -2150,53 +1486,33 @@ bool emitPlayerID(
 
   ) {
 
-
-
     Serial.println(
 
       "RFID_DIAG ADDRESS4_NO_VALID_ID"
 
     );
 
-
-
     return false;
 
   }
 
-
-
-
-
   char cardID[4];
-
-
 
   cardID[0] =
 
     (char)buffer[0];
 
-
-
   cardID[1] =
 
     (char)buffer[1];
-
-
 
   cardID[2] =
 
     (char)buffer[2];
 
-
-
   cardID[3] =
 
     '\0';
-
-
-
-
 
   Serial.print(
 
@@ -2204,25 +1520,15 @@ bool emitPlayerID(
 
   );
 
-
-
   Serial.println(
 
     cardID
 
   );
 
-
-
-
-
   return true;
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -2230,23 +1536,13 @@ bool emitPlayerID(
 
 // ============================================================
 
-
-
 void cleanupRFID() {
 
-
-
   rfid.PICC_HaltA();
-
-
 
   rfid.PCD_StopCrypto1();
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -2254,11 +1550,7 @@ void cleanupRFID() {
 
 // ============================================================
 
-
-
 bool readClassicBlock4() {
-
-
 
   Serial.println(
 
@@ -2266,23 +1558,13 @@ bool readClassicBlock4() {
 
   );
 
-
-
-
-
   MFRC522::StatusCode status;
-
-
-
-
 
   // ----------------------------------------------------------
 
   // Authenticate with Key A
 
   // ----------------------------------------------------------
-
-
 
   status =
 
@@ -2298,25 +1580,17 @@ bool readClassicBlock4() {
 
     );
 
-
-
-
-
   if (
 
     status != MFRC522::STATUS_OK
 
   ) {
 
-
-
     Serial.print(
 
       "RFID_DIAG AUTH_A_FAILED "
 
     );
-
-
 
     Serial.println(
 
@@ -2328,17 +1602,11 @@ bool readClassicBlock4() {
 
     );
 
-
-
-
-
     // --------------------------------------------------------
 
     // Try Key B
 
     // --------------------------------------------------------
-
-
 
     status =
 
@@ -2354,25 +1622,17 @@ bool readClassicBlock4() {
 
       );
 
-
-
-
-
     if (
 
       status != MFRC522::STATUS_OK
 
     ) {
 
-
-
       Serial.print(
 
         "RFID_DIAG AUTH_B_FAILED "
 
       );
-
-
 
       Serial.println(
 
@@ -2384,19 +1644,11 @@ bool readClassicBlock4() {
 
       );
 
-
-
-
-
       return false;
 
     }
 
   }
-
-
-
-
 
   Serial.println(
 
@@ -2404,29 +1656,17 @@ bool readClassicBlock4() {
 
   );
 
-
-
-
-
   // ----------------------------------------------------------
 
   // Large receive buffer
 
   // ----------------------------------------------------------
 
-
-
   byte buffer[64];
-
-
 
   byte bufferSize =
 
     sizeof(buffer);
-
-
-
-
 
   status =
 
@@ -2440,25 +1680,17 @@ bool readClassicBlock4() {
 
     );
 
-
-
-
-
   if (
 
     status != MFRC522::STATUS_OK
 
   ) {
 
-
-
     Serial.print(
 
       "RFID_DIAG BLOCK4_READ_ERROR "
 
     );
-
-
 
     Serial.println(
 
@@ -2470,17 +1702,11 @@ bool readClassicBlock4() {
 
     );
 
-
-
-
-
     Serial.print(
 
       "RFID_DIAG RETURNED_SIZE "
 
     );
-
-
 
     Serial.println(
 
@@ -2488,17 +1714,9 @@ bool readClassicBlock4() {
 
     );
 
-
-
-
-
     return false;
 
   }
-
-
-
-
 
   Serial.print(
 
@@ -2506,21 +1724,13 @@ bool readClassicBlock4() {
 
   );
 
-
-
   Serial.println(
 
     bufferSize
 
   );
 
-
-
-
-
   // Classic block = 16 bytes.
-
-
 
   printRFIDData(
 
@@ -2530,10 +1740,6 @@ bool readClassicBlock4() {
 
   );
 
-
-
-
-
   return emitPlayerID(
 
     buffer
@@ -2542,21 +1748,13 @@ bool readClassicBlock4() {
 
 }
 
-
-
-
-
 // ============================================================
 
 // READ ULTRALIGHT / NTAG PAGE 4
 
 // ============================================================
 
-
-
 bool readUltralightPage4() {
-
-
 
   Serial.println(
 
@@ -2564,21 +1762,11 @@ bool readUltralightPage4() {
 
   );
 
-
-
-
-
   byte buffer[64];
-
-
 
   byte bufferSize =
 
     sizeof(buffer);
-
-
-
-
 
   MFRC522::StatusCode status =
 
@@ -2592,25 +1780,17 @@ bool readUltralightPage4() {
 
     );
 
-
-
-
-
   if (
 
     status != MFRC522::STATUS_OK
 
   ) {
 
-
-
     Serial.print(
 
       "RFID_DIAG PAGE4_READ_ERROR "
 
     );
-
-
 
     Serial.println(
 
@@ -2622,17 +1802,11 @@ bool readUltralightPage4() {
 
     );
 
-
-
-
-
     Serial.print(
 
       "RFID_DIAG RETURNED_SIZE "
 
     );
-
-
 
     Serial.println(
 
@@ -2640,17 +1814,9 @@ bool readUltralightPage4() {
 
     );
 
-
-
-
-
     return false;
 
   }
-
-
-
-
 
   Serial.print(
 
@@ -2658,21 +1824,13 @@ bool readUltralightPage4() {
 
   );
 
-
-
   Serial.println(
 
     bufferSize
 
   );
 
-
-
-
-
   // First 4 bytes correspond to page 4.
-
-
 
   printRFIDData(
 
@@ -2682,10 +1840,6 @@ bool readUltralightPage4() {
 
   );
 
-
-
-
-
   return emitPlayerID(
 
     buffer
@@ -2694,21 +1848,13 @@ bool readUltralightPage4() {
 
 }
 
-
-
-
-
 // ============================================================
 
 // GENERIC ADDRESS-4 FALLBACK
 
 // ============================================================
 
-
-
 bool readUnknownTypeAddress4() {
-
-
 
   Serial.println(
 
@@ -2716,21 +1862,11 @@ bool readUnknownTypeAddress4() {
 
   );
 
-
-
-
-
   byte buffer[64];
-
-
 
   byte bufferSize =
 
     sizeof(buffer);
-
-
-
-
 
   MFRC522::StatusCode status =
 
@@ -2744,25 +1880,17 @@ bool readUnknownTypeAddress4() {
 
     );
 
-
-
-
-
   if (
 
     status != MFRC522::STATUS_OK
 
   ) {
 
-
-
     Serial.print(
 
       "RFID_DIAG ADDRESS4_READ_ERROR "
 
     );
-
-
 
     Serial.println(
 
@@ -2774,17 +1902,11 @@ bool readUnknownTypeAddress4() {
 
     );
 
-
-
-
-
     Serial.print(
 
       "RFID_DIAG RETURNED_SIZE "
 
     );
-
-
 
     Serial.println(
 
@@ -2792,17 +1914,9 @@ bool readUnknownTypeAddress4() {
 
     );
 
-
-
-
-
     return false;
 
   }
-
-
-
-
 
   Serial.print(
 
@@ -2810,17 +1924,11 @@ bool readUnknownTypeAddress4() {
 
   );
 
-
-
   Serial.println(
 
     bufferSize
 
   );
-
-
-
-
 
   printRFIDData(
 
@@ -2830,10 +1938,6 @@ bool readUnknownTypeAddress4() {
 
   );
 
-
-
-
-
   return emitPlayerID(
 
     buffer
@@ -2842,21 +1946,13 @@ bool readUnknownTypeAddress4() {
 
 }
 
-
-
-
-
 // ============================================================
 
 // RFID SCAN
 
 // ============================================================
 
-
-
 void checkRFID() {
-
-
 
   if (
 
@@ -2868,17 +1964,11 @@ void checkRFID() {
 
   }
 
-
-
-
-
   if (
 
     !rfid.PICC_ReadCardSerial()
 
   ) {
-
-
 
     Serial.println(
 
@@ -2886,19 +1976,11 @@ void checkRFID() {
 
     );
 
-
-
     rfid.PCD_StopCrypto1();
-
-
 
     return;
 
   }
-
-
-
-
 
   Serial.println(
 
@@ -2906,15 +1988,7 @@ void checkRFID() {
 
   );
 
-
-
-
-
   printRFIDUID();
-
-
-
-
 
   MFRC522::PICC_Type piccType =
 
@@ -2924,17 +1998,11 @@ void checkRFID() {
 
     );
 
-
-
-
-
   Serial.print(
 
     "RFID_DIAG TYPE "
 
   );
-
-
 
   Serial.println(
 
@@ -2946,25 +2014,15 @@ void checkRFID() {
 
   );
 
-
-
-
-
   bool success =
 
     false;
-
-
-
-
 
   // ----------------------------------------------------------
 
   // CLASSIC
 
   // ----------------------------------------------------------
-
-
 
   if (
 
@@ -2986,25 +2044,17 @@ void checkRFID() {
 
   ) {
 
-
-
     success =
 
       readClassicBlock4();
 
   }
 
-
-
-
-
   // ----------------------------------------------------------
 
   // ULTRALIGHT / NTAG
 
   // ----------------------------------------------------------
-
-
 
   else if (
 
@@ -3014,17 +2064,11 @@ void checkRFID() {
 
   ) {
 
-
-
     success =
 
       readUltralightPage4();
 
   }
-
-
-
-
 
   // ----------------------------------------------------------
 
@@ -3032,11 +2076,7 @@ void checkRFID() {
 
   // ----------------------------------------------------------
 
-
-
   else {
-
-
 
     success =
 
@@ -3044,17 +2084,11 @@ void checkRFID() {
 
   }
 
-
-
-
-
   if (
 
     !success
 
   ) {
-
-
 
     Serial.println(
 
@@ -3064,19 +2098,9 @@ void checkRFID() {
 
   }
 
-
-
-
-
   // Always clean up after any transaction.
 
-
-
   cleanupRFID();
-
-
-
-
 
   Serial.println(
 
@@ -3084,17 +2108,9 @@ void checkRFID() {
 
   );
 
-
-
-
-
   delay(100);
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -3102,11 +2118,7 @@ void checkRFID() {
 
 // ============================================================
 
-
-
 void printRFIDStatus() {
-
-
 
   byte version =
 
@@ -3116,10 +2128,6 @@ void printRFIDStatus() {
 
     );
 
-
-
-
-
   rfidReaderAvailable = version != 0x00 && version != 0xFF;
 
   Serial.print(
@@ -3128,8 +2136,6 @@ void printRFIDStatus() {
 
   );
 
-
-
   Serial.println(
 
     version,
@@ -3137,10 +2143,6 @@ void printRFIDStatus() {
     HEX
 
   );
-
-
-
-
 
   if (
 
@@ -3152,19 +2154,13 @@ void printRFIDStatus() {
 
   ) {
 
-
-
     Serial.println(
 
       "RFID_DIAG ERROR READER_NOT_RESPONDING"
 
     );
 
-
-
   } else {
-
-
 
     Serial.println(
 
@@ -3175,10 +2171,6 @@ void printRFIDStatus() {
   }
 
 }
-
-
-
-
 
 void reportRFIDCheckpoint(const char* phase) {
   Serial.print("RFID_DIAG PHASE ");
@@ -3207,15 +2199,11 @@ bool initializeRFIDReader() {
 
 // ============================================================
 
-
-
 void ticketMotor(
 
   bool on
 
 ) {
-
-
 
   digitalWrite(
 
@@ -3231,17 +2219,11 @@ void ticketMotor(
 
 }
 
-
-
-
-
 // ============================================================
 
 // DISPENSE TICKETS
 
 // ============================================================
-
-
 
 // Nonblocking ticket payout: loop() keeps servicing serial and accelerometers.
 bool ticketPayoutActive = false;
@@ -3301,21 +2283,13 @@ void updateTickets() {
 
 // ============================================================
 
-
-
 void printStatus() {
-
-
 
   Serial.print(
 
     "STATUS SENSORS "
 
   );
-
-
-
-
 
   Serial.println(
 
@@ -3327,17 +2301,9 @@ void printStatus() {
 
   );
 
-
-
-
-
   printRFIDStatus();
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -3345,38 +2311,19 @@ void printStatus() {
 
 // ============================================================
 
-
-
 void handleCommand(
 
   String command
 
 ) {
 
-
-
   command.trim();
-  if (command == "HIT_DEBUG ON" || command == "HIT_DEBUG OFF") {
-    hitDebugEnabled = command == "HIT_DEBUG ON";
-    Serial.println(hitDebugEnabled ? "OK HIT_DEBUG ON" : "OK HIT_DEBUG OFF");
+  if (command == "HIT_DEBUG ON" || command == "HIT_DEBUG OFF"
+      || command == "SENSORS PUZZLE" || command.startsWith("SENSORS FIFO")) {
+    commandFailed = true;
+    Serial.println("ERROR V3 V1 HIT MODE USE SENSORS ENABLE");
     return;
   }
-  long threshold, armDelayMs = 1500;
-  char hitAxis = 'Y';
-  int fifoParameters;
-  if (command == "SENSORS FIFO") {
-    if (enableFifoPolling(4500)) Serial.println("OK SENSORS FIFO ARMED");
-    return;
-  }
-  fifoParameters = sscanf(command.c_str(), "SENSORS FIFO %ld %ld %c", &threshold, &armDelayMs, &hitAxis);
-  if (fifoParameters >= 1) {
-    if (threshold < 1 || threshold > 65535 || armDelayMs < 250 || armDelayMs > 10000 || (hitAxis != 'X' && hitAxis != 'Y' && hitAxis != 'Z')) {
-      commandFailed = true; Serial.println("ERROR FIFO THRESHOLD 1..65535 DELAY_MS 250..10000 AXIS X|Y|Z"); return;
-    }
-    if (enableFifoPolling(threshold, armDelayMs, hitAxis - 'X')) Serial.println("OK SENSORS FIFO ARMED");
-    return;
-  }
-
   if (command == "KEEPALIVE") {
     lastControllerCommand = millis(); Serial.println("OK KEEPALIVE"); return;
   }
@@ -3384,8 +2331,7 @@ void handleCommand(
     leaseEnabled = true; lastControllerCommand = millis(); Serial.println("OK LEASE ON"); return;
   }
   if (command == "SAFE STOP") {
-    stopFifoPolling();
-    hitDetectionEnabled = false; puzzleHitArmed = false;
+    hitDetectionEnabled = false;
     ticketMotor(false); ticketPayoutActive = false;
     stopOutputsPending = true; setAllMoles(false);
     if (mcpReady && !Wire.getWireTimeoutFlag()) stopOutputsPending = false;
@@ -3393,13 +2339,11 @@ void handleCommand(
     Serial.println("OK SAFE STOP"); return;
   }
   if (command == "HEALTH RECOVER") {
-    stopFifoPolling();
     // Probe on a quiet bus; Python preserves an active game during repair.
-    hitDetectionEnabled = false; puzzleHitArmed = false;
+    hitDetectionEnabled = false;
     Wire.end(); Wire.begin(); Wire.setWireTimeout(I2C_TIMEOUT_US, true);
     Wire.beginTransmission(TCA_ADDRESS); Wire.write((uint8_t)0); Wire.endTransmission();
-    mcpInitialized = false; sensorConfiguredMask = 0; fifoConfiguredMask = 0;
-    for (uint8_t id = 0; id < MOLE_COUNT; id++) sensorSampleValid[id] = false;
+    mcpInitialized = false; sensorConfiguredMask = 0;
     command = "HEALTH";
   }
   if (command == "HEALTH") {
@@ -3417,28 +2361,20 @@ void handleCommand(
     uint8_t mask = 0;
     for (uint8_t id = 0; id < MOLE_COUNT; id++) {
       int16_t x, y, z;
-      bool activelyPolling = hitDetectionEnabled && (!puzzleSensorMode || puzzleHitArmed);
-      bool sampleOK;
-      if (activelyPolling && sensorSampleValid[id] && millis() - sensorSampleAt[id] <= 250) {
-        sampleOK = true;
-        x = sensorSampleX[id]; y = sensorSampleY[id]; z = sensorSampleZ[id];
-      } else {
-        if (!(sensorConfiguredMask & (1 << id)) && initializeSensorChecked(id)) sensorConfiguredMask |= (1 << id);
-        sampleOK = (sensorConfiguredMask & (1 << id)) && readAccelerometer(sensorChannel[id], x, y, z);
-      }
+      if (!(sensorConfiguredMask & (1 << id)) && initializeSensorChecked(id)) sensorConfiguredMask |= (1 << id);
+      bool sampleOK = (sensorConfiguredMask & (1 << id)) && readAccelerometer(sensorChannel[id], x, y, z);
       if (sampleOK) {
         mask |= (1 << id);
         Serial.print("SAMPLE "); Serial.print(id); Serial.print(' '); Serial.print(x);
         Serial.print(' '); Serial.print(y); Serial.print(' '); Serial.println(z);
-      } else if (!activelyPolling) { sensorConfiguredMask &= ~(1 << id); }
+      } else { sensorConfiguredMask &= ~(1 << id); }
       Serial.print("HARDWARE MOLE "); Serial.print(id); Serial.print(" OUTPUT ");
       Serial.print(mcpReady ? mcp.digitalRead(solenoidOutput[id]) : -1);
       Serial.print(" RING "); Serial.println(lights[id]->getPixelColor(0));
-      checkForHits(); // Service one-shot hit polling during the telemetry response.
+      // Gameplay capture runs once in loop(), outside health telemetry.
     }
     for (uint8_t id = 0; id < PLAYER_COUNT; id++) {
       Serial.print("HARDWARE PLAYER "); Serial.print(id); Serial.print(" COLOR "); Serial.println(playerLights.getPixelColor(id));
-      checkForHits();
     }
     Serial.print("HARDWARE TICKETS ACTIVE "); Serial.print(ticketPayoutActive ? 1 : 0);
     Serial.print(" TARGET "); Serial.print(ticketTarget); Serial.print(" COUNT "); Serial.print(ticketDispensed);
@@ -3450,8 +2386,6 @@ void handleCommand(
     Serial.println("OK HEALTH"); return;
   }
 
-
-
   if (
 
     command.length() == 0
@@ -3461,8 +2395,6 @@ void handleCommand(
     return;
 
   }
-
-
 
   if (
 
@@ -3476,18 +2408,9 @@ void handleCommand(
 
   }
 
-
-
   if (command == "HEARTBEAT ON" || command == "HEARTBEAT OFF") {
     heartbeatEnabled = command == "HEARTBEAT ON";
     Serial.println(heartbeatEnabled ? "OK HEARTBEAT ON" : "OK HEARTBEAT OFF");
-    return;
-  }
-
-  if (command == "SENSORS PUZZLE") {
-    stopFifoPolling();
-    enableSensorMode(true);
-    Serial.println("OK SENSORS PUZZLE ARMED");
     return;
   }
 
@@ -3497,11 +2420,9 @@ void handleCommand(
 
   ) {
 
-    stopFifoPolling();
-    enableSensorMode(false);
+    enableSensorReporting();
 
     lastMechanicalAction = millis();
-  restartFifoSettlingAfterMotion();
 
     Serial.println("OK SENSORS ENABLED");
 
@@ -3509,25 +2430,19 @@ void handleCommand(
 
   }
 
-
-
   if (
 
     command == "SENSORS DISABLE"
 
   ) {
-    stopFifoPolling();
 
     hitDetectionEnabled = false;
-    puzzleHitArmed = false;
 
     Serial.println("OK SENSORS DISABLED");
 
     return;
 
   }
-
-
 
   if (
 
@@ -3543,8 +2458,6 @@ void handleCommand(
 
   }
 
-
-
   if (
 
     command == "MOLES ALL DOWN"
@@ -3559,8 +2472,6 @@ void handleCommand(
 
   }
 
-
-
   if (
 
     command == "LIGHTS OFF"
@@ -3574,8 +2485,6 @@ void handleCommand(
     return;
 
   }
-
-
 
   int stripR, stripG, stripB;
   if (sscanf(command.c_str(), "PLAYER_LIGHTS %d %d %d", &stripR, &stripG, &stripB) == 3) {
@@ -3603,21 +2512,15 @@ void handleCommand(
 
   }
 
-
-
   // ----------------------------------------------------------
 
   // INDIVIDUAL MOLE
 
   // ----------------------------------------------------------
 
-
-
   int mole;
 
   char moleAction[16];
-
-
 
   if (
 
@@ -3635,8 +2538,6 @@ void handleCommand(
 
   ) {
 
-
-
     if (
 
       mole < 0
@@ -3652,8 +2553,6 @@ void handleCommand(
       return;
 
     }
-
-
 
     if (
 
@@ -3679,8 +2578,6 @@ void handleCommand(
 
     }
 
-
-
     if (
 
       strcmp(
@@ -3705,15 +2602,11 @@ void handleCommand(
 
     }
 
-
-
     commandFailed = true; Serial.println("ERROR BAD MOLE ACTION");
 
     return;
 
   }
-
-
 
   // ----------------------------------------------------------
 
@@ -3721,15 +2614,11 @@ void handleCommand(
 
   // ----------------------------------------------------------
 
-
-
   int r;
 
   int g;
 
   int b;
-
-
 
   if (
 
@@ -3750,8 +2639,6 @@ void handleCommand(
     ) == 4
 
   ) {
-
-
 
     if (
 
@@ -3775,8 +2662,6 @@ void handleCommand(
 
       );
 
-
-
       Serial.print("OK LIGHT ");
 
       Serial.print(mole);
@@ -3799,13 +2684,9 @@ void handleCommand(
 
     }
 
-
-
     return;
 
   }
-
-
 
   // ----------------------------------------------------------
 
@@ -3813,11 +2694,7 @@ void handleCommand(
 
   // ----------------------------------------------------------
 
-
-
   char lightAction[16];
-
-
 
   if (
 
@@ -3835,8 +2712,6 @@ void handleCommand(
 
   ) {
 
-
-
     if (
 
       mole < 0
@@ -3852,8 +2727,6 @@ void handleCommand(
       return;
 
     }
-
-
 
     if (
 
@@ -3879,23 +2752,17 @@ void handleCommand(
 
     }
 
-
-
     commandFailed = true; Serial.println("ERROR BAD LIGHT ACTION");
 
     return;
 
   }
 
-
-
   // ----------------------------------------------------------
 
   // PLAYER LIGHT
 
   // ----------------------------------------------------------
-
-
 
   int rgbPlayer, playerR, playerG, playerB;
   if (sscanf(command.c_str(), "PLAYER_LIGHT %d %d %d %d",
@@ -3913,8 +2780,6 @@ void handleCommand(
 
   char playerAction[16];
 
-
-
   if (
 
     sscanf(
@@ -3931,8 +2796,6 @@ void handleCommand(
 
   ) {
 
-
-
     if (
 
       player < 0
@@ -3948,8 +2811,6 @@ void handleCommand(
       return;
 
     }
-
-
 
     if (
 
@@ -3975,8 +2836,6 @@ void handleCommand(
 
     }
 
-
-
     if (
 
       strcmp(
@@ -4000,8 +2859,6 @@ void handleCommand(
       return;
 
     }
-
-
 
     if (
 
@@ -4027,15 +2884,11 @@ void handleCommand(
 
     }
 
-
-
     commandFailed = true; Serial.println("ERROR BAD PLAYER LIGHT ACTION");
 
     return;
 
   }
-
-
 
   // ----------------------------------------------------------
 
@@ -4043,11 +2896,7 @@ void handleCommand(
 
   // ----------------------------------------------------------
 
-
-
   int ticketCount;
-
-
 
   if (
 
@@ -4062,8 +2911,6 @@ void handleCommand(
     ) == 1
 
   ) {
-
-
 
     if (
 
@@ -4081,23 +2928,17 @@ void handleCommand(
 
     }
 
-
-
     if (!dispenseTickets(ticketCount)) commandFailed = true;
 
     return;
 
   }
 
-
-
   // ----------------------------------------------------------
 
   // STATUS
 
   // ----------------------------------------------------------
-
-
 
   if (
 
@@ -4110,8 +2951,6 @@ void handleCommand(
     return;
 
   }
-
-
 
   if (
 
@@ -4126,8 +2965,6 @@ void handleCommand(
 
   }
 
-
-
   if (command == "RFID INIT") {
     if (initializeRFIDReader()) Serial.println("OK RFID INIT");
     else { commandFailed = true; Serial.println("ERROR RFID INIT FAILED"); }
@@ -4140,17 +2977,11 @@ void handleCommand(
 
   // ----------------------------------------------------------
 
-
-
   commandFailed = true; Serial.print("ERROR UNKNOWN COMMAND ");
 
   Serial.println(command);
 
 }
-
-
-
-
 
 // ============================================================
 
@@ -4158,11 +2989,7 @@ void handleCommand(
 
 // ============================================================
 
-
-
 void readSerialCommands() {
-
-
 
   while (
 
@@ -4170,23 +2997,15 @@ void readSerialCommands() {
 
   ) {
 
-
-
     char c =
 
       Serial.read();
-
-
-
-
 
     if (
 
       c == '\n'
 
     ) {
-
-
 
       if (commandOverflow) { commandOverflow = false; commandBuffer = ""; Serial.println("ERROR COMMAND TOO LONG"); continue; }
       String line = commandBuffer;
@@ -4207,15 +3026,9 @@ void readSerialCommands() {
         Serial.println(commandFailed ? " ERROR" : " OK");
       }
 
-
-
-
-
       commandBuffer =
 
         "";
-
-
 
     } else if (
 
@@ -4223,16 +3036,10 @@ void readSerialCommands() {
 
     ) {
 
-
-
       if (commandOverflow) continue;
       commandBuffer +=
 
         c;
-
-
-
-
 
       if (
 
@@ -4241,8 +3048,6 @@ void readSerialCommands() {
         > 192
 
       ) {
-
-
 
         commandOverflow = true;
         commandBuffer =
@@ -4257,31 +3062,19 @@ void readSerialCommands() {
 
 }
 
-
-
-
-
 // ============================================================
 
 // SETUP
 
 // ============================================================
 
-
-
 void setup() {
-
-
 
   Serial.begin(
 
     115200
 
   );
-
-
-
-
 
   delay(
 
@@ -4300,19 +3093,11 @@ void setup() {
   Serial.print(' ');
   Serial.println(F(MOLE_SOURCE_SHA256));
 
-
-
-
-
-
-
   // ----------------------------------------------------------
 
   // I2C
 
   // ----------------------------------------------------------
-
-
 
   // Check RFID before cabinet peripherals, matching the standalone tester.
   Serial.println("RFID_DIAG PHASE EARLY BEFORE CABINET");
@@ -4322,22 +3107,14 @@ void setup() {
 
   Wire.begin();
 
-
-
   configureI2CTimeout();
   reportRFIDCheckpoint("AFTER I2C");
-
-
-
-
 
   // ----------------------------------------------------------
 
   // Mole LEDs
 
   // ----------------------------------------------------------
-
-
 
   for (
 
@@ -4349,11 +3126,7 @@ void setup() {
 
   ) {
 
-
-
     lights[mole]->begin();
-
-
 
     lights[mole]->setBrightness(
 
@@ -4361,19 +3134,11 @@ void setup() {
 
     );
 
-
-
     lights[mole]->clear();
-
-
 
     lights[mole]->show();
 
   }
-
-
-
-
 
   reportRFIDCheckpoint("AFTER MOLE LEDS");
 
@@ -4383,14 +3148,10 @@ void setup() {
 
   // ----------------------------------------------------------
 
-
-
   playerLights.begin();
   playerLightsAlternate.begin();
   playerLightsAlternate.setBrightness(50);
   reportRFIDCheckpoint("AFTER PLAYER BEGIN");
-
-
 
   playerLights.setBrightness(
 
@@ -4398,17 +3159,11 @@ void setup() {
 
   );
 
-
-
   reportRFIDCheckpoint("AFTER PLAYER BRIGHTNESS");
   playerLights.clear();
   reportRFIDCheckpoint("AFTER PLAYER BUFFER CLEAR");
   showPlayerLights();
   reportRFIDCheckpoint("AFTER PLAYER LEDS");
-
-
-
-
 
   // ----------------------------------------------------------
 
@@ -4416,15 +3171,11 @@ void setup() {
 
   // ----------------------------------------------------------
 
-
-
   if (
 
     !(mcpInitialized = mcp.begin_I2C())
 
   ) {
-
-
 
     Serial.println(
 
@@ -4432,11 +3183,7 @@ void setup() {
 
     );
 
-
-
   } else {
-
-
 
     for (
 
@@ -4448,8 +3195,6 @@ void setup() {
 
     ) {
 
-
-
       mcp.pinMode(
 
         solenoidOutput[mole],
@@ -4457,10 +3202,6 @@ void setup() {
         OUTPUT
 
       );
-
-
-
-
 
       mcp.digitalWrite(
 
@@ -4474,10 +3215,6 @@ void setup() {
 
   }
 
-
-
-
-
   mcpReady = mcpInitialized;
   reportRFIDCheckpoint("AFTER SOLENOIDS");
 
@@ -4487,14 +3224,8 @@ void setup() {
 
   // ----------------------------------------------------------
 
-
-
   initializeSensors();
   reportRFIDCheckpoint("AFTER SENSORS");
-
-
-
-
 
   // ----------------------------------------------------------
 
@@ -4502,16 +3233,11 @@ void setup() {
 
   // ----------------------------------------------------------
 
-
-
-
   // Default MIFARE Classic factory key:
 
   //
 
   // FF FF FF FF FF FF
-
-
 
   for (
 
@@ -4523,17 +3249,11 @@ void setup() {
 
   ) {
 
-
-
     defaultKey.keyByte[i] =
 
       0xFF;
 
   }
-
-
-
-
 
   Serial.println(
 
@@ -4541,23 +3261,13 @@ void setup() {
 
   );
 
-
-
-
-
   printRFIDStatus();
-
-
-
-
 
   // ----------------------------------------------------------
 
   // Ticket dispenser
 
   // ----------------------------------------------------------
-
-
 
   pinMode(
 
@@ -4567,19 +3277,11 @@ void setup() {
 
   );
 
-
-
-
-
   ticketMotor(
 
     false
 
   );
-
-
-
-
 
   pinMode(
 
@@ -4589,33 +3291,19 @@ void setup() {
 
   );
 
-
-
-
-
   // ----------------------------------------------------------
 
   // Passive startup
 
   // ----------------------------------------------------------
 
-
-
   hitDetectionEnabled =
 
     false;
 
-
-
-
-
   lastMechanicalAction =
 
     millis();
-
-
-
-
 
   // Increase all MPU6050 accelerometers to +/-16g before gameplay.
 
@@ -4629,19 +3317,13 @@ void setup() {
 
   }
 
-
-
   Serial.println("ACCEL_RANGE +/-16G");
-
-
 
   Serial.println(
 
     "MAPPING logical_mole -> mux_channel"
 
   );
-
-
 
   for (int mole = 0; mole < MOLE_COUNT; mole++) {
 
@@ -4655,8 +3337,6 @@ void setup() {
 
   }
 
-
-
   Serial.println(
 
     "READY"
@@ -4668,49 +3348,33 @@ void setup() {
 
 }
 
-
-
-
-
 // ============================================================
 
 // LOOP
 
 // ============================================================
 
-
-
 void loop() {
-
-
 
 #ifdef __AVR__
   wdt_reset();
 #endif
   if (leaseEnabled && millis() - lastControllerCommand > CONTROLLER_LEASE_MS) {
-    leaseEnabled = false; hitDetectionEnabled = false; puzzleHitArmed = false;
+    leaseEnabled = false; hitDetectionEnabled = false;
     ticketMotor(false); ticketPayoutActive = false;
     stopOutputsPending = true; setAllMoles(false);
     if (mcpReady && !Wire.getWireTimeoutFlag()) stopOutputsPending = false;
     turnAllMoleLightsOff(); clearPlayerLights();
-    stopFifoPolling();
     Serial.println("ERROR CONTROLLER LEASE EXPIRED SAFE STOP REQUESTED");
   }
   loopCounter++;
 
-
-
   emitHeartbeat();
-
-
 
   readSerialCommands();
 
-
-
   // Sample first. RC522 card-presence checks can block on a missing card;
   // running one on every loop was delaying every accelerometer scan.
-  checkFifoHits();
   checkForHits();
   updateTickets();
   unsigned long now = millis();
@@ -4718,8 +3382,6 @@ void loop() {
     checkRFID();
     lastRFIDPoll = millis();
   }
-
-
 
   reportI2CTimeoutIfNeeded();
 

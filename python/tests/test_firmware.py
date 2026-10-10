@@ -12,7 +12,7 @@ class FirmwareTests(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.bundle = Path(folder.name)
-        self.manifest = {'name': 'MOLE_FINAL_NO_INTERVAL_v2', 'version': '2.1.0', 'sha256': 'a' * 64}
+        self.manifest = {'name': 'MOLE_FINAL_V3', 'version': '3.0.0', 'sha256': 'a' * 64}
         (self.bundle / 'manifest.json').write_text(json.dumps(self.manifest))
         (self.bundle / (self.manifest['name'] + '.ino.hex')).write_text(':00000001FF\n')
         env = patch.dict('os.environ', {'FIRMWARE_DIR': str(self.bundle), 'FIRMWARE_AUTO_FLASH': '1', 'FIRMWARE_HISTORY_PATH': str(self.bundle / 'history.json')})

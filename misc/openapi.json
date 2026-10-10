@@ -672,7 +672,7 @@
       },
       "post": {
         "operationId": "post_configuration",
-        "summary": "Persist desired settings in maintenance",
+        "summary": "Persist settings; hit threshold may change during gameplay",
         "responses": {
           "202": {
             "description": "Accepted, not executed",
@@ -759,7 +759,8 @@
               }
             }
           }
-        }
+        },
+        "description": "V3 uses V1 hit detection with fixed firmware settings. FIFO modes and FIFO tuning are disabled. Configuration changes require maintenance."
       }
     },
     "/firmware": {

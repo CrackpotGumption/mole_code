@@ -18,6 +18,9 @@ from app.firmware import connect_verified, history_path
 from app.mole_game import MoleGame, GameState, PLAYER_IDS, PLAYER_INDEX, MOLE_ID_BY_NAME, RGB
 
 
+FIFO_SETTINGS = frozenset(('HIT_THRESHOLD_COUNTS', 'HIT_DEBUG', 'HIT_ARM_DELAY_MS', 'HIT_AXIS'))
+
+
 class Cabinet:
     def __init__(self, controller_factory, port, stopped):
         self.factory, self.port, self.stopped = controller_factory, port, stopped
@@ -38,6 +41,10 @@ class Cabinet:
         self._health_probe = None
         self._last_probe_report = None
         self._repair_queued = False
+        self._startup_retry_eligible = False
+        self._startup_retry_queued = False
+        self._startup_retry_attempts = 0
+        self._startup_retry_at = None
         self._next_fault_flash = 0
         self._fault_red = False
         self.hardware_recovery = None
@@ -45,7 +52,12 @@ class Cabinet:
         self.pending_admin_state = None
         try:
             self.settings = read(self.state_directory / 'runtime-settings.json', {})
-            self._apply_settings(self.settings)
+            # Retire persisted FIFO settings without faulting upgraded cabinets.
+            migrated = {key: value for key, value in self.settings.items() if key not in FIFO_SETTINGS}
+            self._apply_settings(migrated)
+            if migrated != self.settings:
+                write(self.state_directory / 'runtime-settings.json', migrated)
+            self.settings = migrated
         except Exception as error:
             self.settings = {}
             self.fault = {'message': f'Invalid saved configuration: {error}', 'timestamp': time.time()}
@@ -59,6 +71,8 @@ class Cabinet:
             elif name in ('AUDIO_ENABLED', 'LOG_RAW_ACCEL', 'LOG_HEARTBEAT', 'LOG_RAINBOW_COMMANDS', 'FIRMWARE_AUTO_FLASH'):
                 if str(value) not in ('0', '1'):
                     raise ValueError(f'Invalid {name}')
+            elif name in FIFO_SETTINGS:
+                raise ValueError('FIFO tuning is disabled in V3; detection settings are firmware constants')
             elif name == 'AUDIO_DEVICE':
                 if not isinstance(value, str) or len(value) > 128 or any(ord(c) < 32 for c in value):
                     raise ValueError('Invalid audio device')
@@ -86,6 +100,8 @@ class Cabinet:
             raise ValueError('Enter maintenance mode before reconnecting a running game')
         if action not in supported:
             raise ValueError('Unsupported action')
+        if action == 'configure' and isinstance(payload.get('settings'), dict) and FIFO_SETTINGS.intersection(payload['settings']):
+            raise ValueError('FIFO tuning is disabled in V3; detection settings are firmware constants')
         if action in ('reset_game', 'restore_state', 'configure', 'firmware_retry', 'audio') or action.startswith('host_'):
             if not self.maintenance:
                 raise ValueError('Enter maintenance mode first')
@@ -117,7 +133,10 @@ class Cabinet:
                 self.record_error(str(error))
                 if action in ('recover', 'resume', 'firmware_retry'):
                     self.latch_fault(str(error))
+                    self._schedule_startup_retry()
             finally:
+                if action == 'recover':
+                    self._startup_retry_queued = False
                 self.actions.task_done()
 
     def record_error(self, message):
@@ -181,6 +200,7 @@ class Cabinet:
                 break
             if attempt == 4:
                 self._last_probe_report = report
+                self._startup_retry_eligible = True
                 raise RuntimeError(f'Required hardware not ready after 5 checks: {report}')
             if self.stopped.wait(3):
                 raise RuntimeError('Controller stopped during health retries')
@@ -198,6 +218,8 @@ class Cabinet:
         self._health_probe = None
         self.health_retry_at = time.monotonic() + 10
         self._repair_queued = False
+        self._startup_retry_eligible = False
+        self._startup_retry_at = None
         self._new_game(admin_state=admin_state)
         self.phase = 'MAINTENANCE' if self.maintenance else 'READY'
         return {'connected': True, 'firmware': self.arduino.firmware_identity}
@@ -364,6 +386,8 @@ class Cabinet:
     def serial(self, command):
         if not self.arduino or not self.arduino.running:
             raise RuntimeError('Arduino connection is unavailable')
+        if command.upper().startswith(('SENSORS FIFO', 'SENSORS PUZZLE', 'HIT_DEBUG')):
+            raise ValueError('FIFO and puzzle modes are disabled in V3; use SENSORS ENABLE')
         # Reads/diagnostics can run in game mode; raw hardware changes require maintenance.
         if not self.maintenance and command.upper() not in ('PING', 'STATUS', 'HEALTH', 'RFID STATUS', 'HEARTBEAT ON', 'HEARTBEAT OFF'):
             raise ValueError('Raw hardware commands require maintenance mode')
@@ -418,9 +442,11 @@ class Cabinet:
                     self.health_failures = 0
                     self.health_retry_at = now + 10
                 else:
-                    self.health_failures += 1
-                    self.health_retry_at = now + 3
-                    self.record_error(f'Health check failed ({self.health_failures}/5): {self._last_probe_report}')
+                    previous_failures = self.health_failures
+                    self.health_failures = min(5, self.health_failures + 1)
+                    self.health_retry_at = now + (10 if self.phase == 'FAULT' and self.health_failures >= 5 else 3)
+                    if self.health_failures != previous_failures:
+                        self.record_error(f'Health check failed ({self.health_failures}/5): {self._last_probe_report}')
                     if self.health_failures >= 5 and self.phase == 'READY':
                         self.latch_fault('Required hardware lost after 5 consecutive health failures')
                         if not self._repair_queued:
@@ -444,7 +470,36 @@ class Cabinet:
         self.arduino.submit_command(f'PLAYER_LIGHTS {color}', origin='fault', quiet=True)
         self._next_fault_flash = now + 0.5
 
+    def _schedule_startup_retry(self):
+        if self.game is not None or not self._startup_retry_eligible or self.maintenance:
+            return
+        if self._startup_retry_attempts >= 3:
+            self._startup_retry_at = None
+            self.record_error('Automatic startup recovery exhausted after 3 attempts; manual recovery remains available')
+            return
+        delay = min(30 * (2 ** self._startup_retry_attempts), 120)
+        self._startup_retry_at = time.monotonic() + delay
+        self.record_error(f'Automatic startup recovery scheduled in {delay} seconds')
+
+    def _retry_startup(self, now):
+        if (self.phase != 'FAULT' or self.game is not None or self.maintenance
+                or self.stopped.is_set() or self._startup_retry_queued
+                or self._startup_retry_at is None or now < self._startup_retry_at):
+            return
+        if not self.actions.empty():
+            return
+        self._startup_retry_queued = True
+        try:
+            self.submit('recover', {})
+        except queue.Full:
+            self._startup_retry_queued = False
+            return
+        self._startup_retry_attempts += 1
+        self._startup_retry_at = None
+        self.record_error(f'Automatic startup recovery attempt {self._startup_retry_attempts}/3')
+
     def tick(self):
+        self._retry_startup(time.monotonic())
         controller = self.arduino
         if controller and controller.running:
             now = time.monotonic()
@@ -502,6 +557,10 @@ class Cabinet:
                 'pending_admin_restore': self.pending_admin_state is not None,
                 'health_monitor': {'normal_interval_seconds': 10, 'retry_interval_seconds': 3, 'failure_limit': 5, 'consecutive_failures': self.health_failures, 'probe_pending': self._health_probe is not None, 'last_hardware_report': self._last_probe_report},
                 'hardware_recovery': self.hardware_recovery,
+                'startup_recovery': {'eligible': self._startup_retry_eligible and self.game is None,
+                                     'attempts': self._startup_retry_attempts, 'max_attempts': 3,
+                                     'queued': self._startup_retry_queued,
+                                     'next_attempt_in_seconds': max(0, round(self._startup_retry_at - time.monotonic(), 1)) if self._startup_retry_at is not None else None},
                 'fault_history': read_json(self.state_directory / 'fault-history.json') or []}
 
     def close(self):

@@ -88,7 +88,7 @@ def make_handler(addresses):
                 return self.reply(200, SPEC)
             if path == '/reference':
                 return self.reply(200, {'text': (ROOT.parent / 'misc/API_REFERENCE.md').read_text()})
-            files = {'/': ('index.html', 'text/html; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8')}
+            files = {'/': ('index.html', 'text/html; charset=utf-8'), '/sensors.js': ('sensors.js', 'text/javascript; charset=utf-8'), '/app.js': ('app.js', 'text/javascript; charset=utf-8'), '/style.css': ('style.css', 'text/css; charset=utf-8')}
             if path not in files:
                 return self.reply(404, {'error': 'Not found'})
             name, mime = files[path]

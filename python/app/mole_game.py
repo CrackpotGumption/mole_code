@@ -1,5 +1,6 @@
 import colorsys
 import math
+import os
 import random
 import time
 import threading
@@ -962,7 +963,7 @@ class MoleGame:
             )
 
 
-        # _resume_hit_detection arms one firmware HIT after setup drains.
+        # _resume_hit_detection enables continuous V1 detection after setup drains.
 
 
     # ========================================================
@@ -1618,9 +1619,9 @@ class MoleGame:
         # ACKs are read on a separate thread, so waiting here is safe.
         self.arduino.wait_until_idle()
         # Capture the cutoff before arming, so a strike received immediately
-        # after the ACK isn't dropped once firmware has consumed its one hit.
+        # after the ACK is not dropped as stale.
         self._accept_samples_after = time.monotonic()
-        self.arduino.send("SENSORS PUZZLE")
+        self.arduino.send("SENSORS ENABLE")
         self.arduino.wait_until_idle()
 
     def handle_accel(self, mole_id, sensor_channel, x, y, z, received_at=None):
@@ -1774,7 +1775,10 @@ class MoleGame:
                 return
 
 
-            if self.SENSOR_CHANNELS.get(mole_id) != sensor_channel or strength < abs(self.HIT_Z_THRESHOLD):
+            if self.SENSOR_CHANNELS.get(mole_id) != sensor_channel or not 1 <= strength <= 65535:
+                return
+            # Continuous V1 sensing can report ringing from a completed target.
+            if MOLE_BY_ID[mole_id] in self.state.whack_order[:self.state.hit_progress]:
                 return
             self.handle_hit(
                 mole_id,

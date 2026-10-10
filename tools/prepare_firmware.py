@@ -5,8 +5,8 @@ from pathlib import Path
 import shutil
 import sys
 
-NAME = 'MOLE_FINAL_NO_INTERVAL_v2'
-VERSION = '3.0.5'
+NAME = 'MOLE_FINAL_V3'
+VERSION = '3.0.0'
 
 def prepare(source, destination):
     source = Path(source)

@@ -98,3 +98,23 @@ Volume (application 3.2.9+) accepts 0–400% through POST /audio in maintenance.
 It persists and applies to the next cue without reconnecting. Above 100% boosts
 samples; inspect last_clipped_samples for potential distortion. The hardware
 mixer remains at maximum.
+
+## Strike analysis
+
+Open a cabinet → Sensors. It records cached GET /diagnostics observations once per
+second while open, with no overlap and backoff on failures. It sends no serial
+commands automatically. Closing or changing tabs stops recording. The Sensors
+recorder has its own pause button, separate from global fleet polling.
+
+The V3 recorder parses SCORES, HIT, IMPACT_REJECTED and sensor enable/disable
+observations, retaining legacy FIFO parsing for older recordings. It deduplicates
+by controller session, timestamp and line and marks potential gaps. Capture is
+bounded to 5000 observations; export before closing the tab.
+
+The chart shows each mole's largest XYZ range in a shared 15 ms capture. Scores
+of -1 denote mechanically suppressed moles. The firmware requires 10,000 counts
+and a 15% winning margin. Live FIFO tuning and FIFO bench commands are disabled.
+In maintenance, raise moles and enable sensors; detection continues after each
+125 ms cooldown. Disable sensors and lower moles afterward. Resume starts fresh.
+
+Verify parsing and continuity with `node portal/tests/test_sensors.js`.

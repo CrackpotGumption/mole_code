@@ -26,6 +26,7 @@ const unsigned long PUZZLE_ARM_SETTLE = 750;
 const int16_t PUZZLE_HIT_Z = -9000;
 const int16_t PUZZLE_RELEASE_Z = -6400;
 bool hitDetectionEnabled = false;
+bool hitDebugEnabled = true;
 unsigned long lastSensorPoll = 0;
 unsigned long clockMs = 0;
 unsigned long reads = 0;
@@ -56,9 +57,10 @@ int main() {
   values[0]=-12000; advance(725);
   assert(Serial.buffer.str().find("HIT ")==std::string::npos);
   values[0]=-1900; advance(25); // Require rest after settling.
-  values[0]=-12000; advance(25);
-  assert(Serial.buffer.str().find("HIT 0 0 12000")!=std::string::npos);
+  values[0]=-12000; values[3]=-18000; advance(25);
+  assert(Serial.buffer.str().find("HIT 3 3 18000")!=std::string::npos);
   assert(!puzzleHitArmed);
+  assert(Serial.buffer.str().find("WINNER 3 STRENGTH 18000")!=std::string::npos);
   auto first=Serial.buffer.str(); auto previousReads=reads;
   values[1]=-15000; advance(100);
   assert(reads==previousReads); // Stop extra traffic after the one puzzle hit.

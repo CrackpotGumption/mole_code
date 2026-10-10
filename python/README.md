@@ -393,3 +393,13 @@ the source hash identifies actual application contents even with uncommitted edi
 No credentials or complete environment variables are included.
 
 See `misc/ERROR_HANDLING_REVIEW.md` for current limitations and recovery additions.
+
+
+V3 default deployment (application 3.2.22): the image bundles MOLE_FINAL_V3
+3.0.0 with V1 hit detection and V2 cabinet controls. Startup verifies the bundled
+identity and automatically flashes mismatched firmware when FIRMWARE_AUTO_FLASH
+is enabled (default). Gameplay and recovery use SENSORS ENABLE; FIFO modes and
+FIFO tuning are disabled. Saved FIFO tuning is retired on startup.
+Publish the rebuilt image before restarting cabinet services; restarting an old
+container alone does not update its image. The installed launcher pulls the
+configured image before starting it, retaining its previous image on pull failure.

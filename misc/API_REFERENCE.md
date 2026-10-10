@@ -171,7 +171,7 @@ All endpoints below return a cabinet operation unless stated otherwise. Enter ma
 | `/game/badge` | `{"player":"001"}` | No; requires READY | Game state after badge handling |
 | `/game/reset` | `{"confirm":"RESET GAME"}` | Yes | Fresh game state; stays in maintenance, clears staged restore |
 | `/game/restore` | `{"confirm":"RESTORE GAME","state":{...}}` | Yes | `{staged:true,apply:"POST /resume",state:{...}}` |
-| `/configuration` | `{"settings":{...}}` | Yes | Desired configuration |
+| `/configuration` | `{"settings":{...}}` | Except hit threshold | Desired configuration |
 | `/firmware/retry` | `{"confirm":"FLASH MEGA"}` | Yes | Connected/firmware result; clears flash guard and forces upload |
 | `/audio` | `{"cue":"<available-cue>"}` or `{"cue":"STOP"}` | Yes | Audio diagnostics |
 | `/host/actions` | Action-specific object below | Yes | Host job record nested in operation.result |
@@ -207,6 +207,13 @@ POST `/configuration` merges `settings` with existing overrides, persists settin
 | LOG_RAINBOW_COMMANDS | 0/1 or string equivalent | 0 |
 | FIRMWARE_AUTO_FLASH | 0/1 or string equivalent | 1 |
 
+V3 uses V1's 10 ms trigger scan, shared 15 ms range capture, 10,000-count
+minimum, 15% winning margin, 125 ms cooldown and 300 ms suppression of moved
+moles. FIFO mode and live FIFO tuning are disabled. Saved FIFO settings are
+retired automatically during upgrade; new requests for them are rejected.
+Configuration changes require maintenance. `SENSORS ENABLE` starts continuous
+classified hit reporting; `SENSORS DISABLE` stops it.
+
 Unknown settings are rejected. JSON true/false are not accepted for the 0/1 flags. GET returns strings even when POST used numbers. Firmware retry is explicit upload and distinct from the auto-flash setting. Automatic firmware failures are guarded across restarts (two failures/ten-minute cooldown).
 
 ### Host actions
@@ -237,7 +244,7 @@ Outside maintenance only PING, STATUS, HEALTH, RFID STATUS, HEARTBEAT ON, HEARTB
 | `PING`, `STATUS`, `HEALTH` | Firmware identity/status/hardware reporting |
 | `RFID STATUS`, `RFID INIT` | RFID report/reinitialize |
 | `HEARTBEAT ON`, `HEARTBEAT OFF` | Firmware heartbeat logging |
-| `SENSORS PUZZLE` | Arm one puzzle hit |
+| `SENSORS ENABLE` | Enable continuous V1 hit detection |
 | `SENSORS ENABLE`, `SENSORS DISABLE` | Repeated hit detection on/off |
 | `MOLE <0..4> UP`, `MOLE <0..4> DOWN` | Individual piston output |
 | `MOLES ALL UP`, `MOLES ALL DOWN` | All piston outputs |
@@ -340,3 +347,11 @@ A health-loss fault requests stopped outputs, pauses game input and shows, and f
 On successful in-process hardware recovery, the same game and controller are retained. Solved players, active player, puzzle colors/order and hit progress remain unchanged; expected outputs are restored and input is rearmed. Shows pause their timing and resume. This is not power-loss recovery: process/power/Arduino reset still starts fresh. Existing manual resume/reconnect behavior remains explicit. Recovery never issues a duplicate ticket payout; a payout stopped by SAFE STOP is not automatically reissued. If recovery fails, the cabinet stays faulted with red indication and live API. Lighting can fail if serial or controller communication is unavailable.
 
 Failure sequence now disables hit polling throughout: dancing moles, red rings, and laughter only. Strikes do not retract/replace moles or interrupt laughter. Recovery of a paused failure show keeps polling disabled. Victory also keeps hit polling disabled; ticket events continue to be processed. Only normal puzzles arm hit detection.
+
+## Strike dashboard integration
+
+See [SENSOR_DASHBOARD_API.md](SENSOR_DASHBOARD_API.md) for V3 capture-score observations and the maintenance test sequence.
+
+## Startup hardware recovery (3.2.20)
+
+Sensor initialization is sequential, with a 10 ms channel settle, 50 ms wake settle and 25 ms gap before the next healthy sensor; the range register is verified. `SENSOR_INIT_FAIL` logs identify mole, channel, failed step/register, readback and timeout flag. After the initial five health checks fail, the application can automatically reconnect before any game has initialized: up to three delayed attempts, waiting 30, 60 and 120 seconds after preceding failures. Maintenance suppresses these attempts. Firmware/serial startup errors without a hardware-readiness failure do not independently enable this recovery policy. Active games continue to use the separate state-preserving hardware repair path. `/diagnostics.startup_recovery` reports eligibility, attempts, max_attempts, queued and next_attempt_in_seconds. Exhaustion leaves the fault visible and manual POST `/recover` available.

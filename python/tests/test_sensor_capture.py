@@ -26,6 +26,27 @@ class SensorCaptureTests(unittest.TestCase):
         self.controller.event_queue = queue.Queue()
         self.controller.event_handler = Mock()
 
+    def test_zero_sample_streak_and_trace_retention(self):
+        from collections import deque
+        c = self.controller
+        c._diagnostic_lock = threading.Lock()
+        c._serial_line_count = 0
+        c._recent_serial = deque(maxlen=100)
+        c._hit_traces = deque(maxlen=250)
+        c._last_sensor_values = {}
+        c._last_sensor_at = {}
+        c._sensor_zero_streak = {}
+        for _ in range(3):
+            c._record_serial('SAMPLE 3 0 0 0')
+        self.assertEqual(c._sensor_zero_streak[3], 3)
+        c._record_serial('SAMPLE 3 1 2 -2000')
+        self.assertEqual(c._sensor_zero_streak[3], 0)
+        c._record_serial('HIT_TRACE MOLE 3 REASON CANDIDATE')
+        for _ in range(110):
+            c._record_serial('OK KEEPALIVE')
+        self.assertEqual(len(c._hit_traces), 1)
+        self.assertEqual(len(c._recent_serial), 100)
+
     def test_capture_routes_hits_while_preserving_badges(self):
         controller = self.controller
         controller.begin_sensor_capture()

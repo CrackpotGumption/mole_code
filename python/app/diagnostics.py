@@ -9,7 +9,7 @@ import platform
 import shutil
 import time
 
-APP_VERSION = '3.2.14'
+APP_VERSION = '3.2.22'
 
 
 def app_source_hash():

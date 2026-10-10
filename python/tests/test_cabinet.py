@@ -58,6 +58,64 @@ class CabinetTests(unittest.TestCase):
         waiting = patch.object(self.stopped, 'wait', return_value=False)
         waiting.start()
         self.addCleanup(waiting.stop)
+    def test_fifo_configuration_and_serial_modes_are_disabled(self):
+        for key, value in {'HIT_THRESHOLD_COUNTS': 4500, 'HIT_ARM_DELAY_MS': 1500,
+                           'HIT_AXIS': 'Y', 'HIT_DEBUG': 1}.items():
+            with self.assertRaisesRegex(ValueError, 'FIFO tuning is disabled'):
+                self.cabinet.submit('configure', {'settings': {key: value}})
+            with self.assertRaisesRegex(ValueError, 'FIFO tuning is disabled'):
+                self.cabinet._act('configure', {'settings': {key: value}})
+            self.assertNotIn(key, self.cabinet.configuration())
+        self.cabinet.arduino = self.controller
+        self.cabinet.maintenance = True
+        for command in ('SENSORS FIFO 4500 1500 Y', 'SENSORS PUZZLE', 'HIT_DEBUG ON'):
+            with self.assertRaisesRegex(ValueError, 'disabled in V3'):
+                self.cabinet.serial(command)
+
+    def test_saved_fifo_settings_are_retired_without_startup_fault(self):
+        saved = {'HIT_THRESHOLD_COUNTS': 4500, 'HIT_ARM_DELAY_MS': 1500,
+                 'HIT_AXIS': 'Y', 'HIT_DEBUG': 1, 'FAILURE_SECONDS': 5}
+        (self.root / 'runtime-settings.json').write_text(json.dumps(saved))
+        upgraded = Cabinet(Mock(), '/dev/test', self.stopped)
+        self.assertIsNone(upgraded.fault)
+        self.assertEqual(upgraded.settings, {'FAILURE_SECONDS': 5})
+        self.assertEqual(json.loads((self.root / 'runtime-settings.json').read_text()), {'FAILURE_SECONDS': 5})
+
+    def test_startup_recovery_backoff_and_never_restarts_active_game(self):
+        self.controller.mask = 15
+        with patch('app.cabinet.connect_verified', return_value=self.controller):
+            with self.assertRaisesRegex(RuntimeError, '5 checks'):
+                self.cabinet._connect()
+        self.cabinet.latch_fault('startup hardware missing')
+        with patch('app.cabinet.time.monotonic', return_value=100):
+            self.cabinet._schedule_startup_retry()
+        self.assertEqual(self.cabinet._startup_retry_at, 130)
+        self.cabinet._retry_startup(129)
+        self.assertTrue(self.cabinet.actions.empty())
+        self.cabinet._retry_startup(130)
+        self.assertEqual(self.cabinet._startup_retry_attempts, 1)
+        self.assertEqual(self.cabinet.actions.qsize(), 1)
+        self.cabinet._retry_startup(131)
+        self.assertEqual(self.cabinet.actions.qsize(), 1)
+        _, action, _ = self.cabinet.actions.get_nowait()
+        self.cabinet.actions.task_done()
+        self.assertEqual(action, 'recover')
+        self.cabinet._startup_retry_queued = False
+        with patch('app.cabinet.time.monotonic', return_value=200):
+            self.cabinet._schedule_startup_retry()
+        self.assertEqual(self.cabinet._startup_retry_at, 260)
+        self.cabinet.maintenance = True
+        self.cabinet._retry_startup(300)
+        self.assertTrue(self.cabinet.actions.empty())
+        self.cabinet.maintenance = False
+        self.cabinet.game = Mock()
+        self.cabinet._retry_startup(300)
+        self.assertTrue(self.cabinet.actions.empty())
+        self.cabinet.game = None
+        self.cabinet._startup_retry_attempts = 3
+        self.cabinet._schedule_startup_retry()
+        self.assertIsNone(self.cabinet._startup_retry_at)
+
     def cleanup(self):
         self.stopped.set()
         self.cabinet.close()
