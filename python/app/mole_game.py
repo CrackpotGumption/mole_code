@@ -323,7 +323,7 @@ class MoleGame:
         state_log_path=None,
         audio=None,
         failure_seconds=15.0,
-        victory_seconds=45.0,
+        victory_seconds=19.0,
         idle_frame_seconds=2.0,
         stop_requested=None,
     ):
@@ -345,6 +345,7 @@ class MoleGame:
         self._stopping = False
         self.state = GameState()
         self._accept_samples_after = float("inf")
+        self._accept_badges_after = float("-inf")
         self._hit_latched = set()
         self._last_hit = {}
         self._hardware_paused = False
@@ -1304,11 +1305,15 @@ class MoleGame:
         self.arduino.send("SENSORS DISABLE")
         self.arduino.wait_until_idle()
         if victory:
+            self._accept_badges_after = float("inf")
+            self.arduino.send("RFID PAUSE")
+            self.arduino.wait_until_idle()
             self.audio.play_victory(seconds)
         else:
             self.audio.play_failure(seconds)
-        deadline = time.monotonic() + seconds
-        next_motion = time.monotonic()
+        show_started = time.monotonic()
+        deadline = show_started + seconds
+        next_motion = show_started
         motion_interval = 0.5 if victory else 1.0
         next_rainbow = next_motion
         raised, raised_at, latched, last_hit = set(), {}, set(), {}
@@ -1328,6 +1333,8 @@ class MoleGame:
                     time.sleep(0.02)
                     elapsed = time.monotonic() - now
                     deadline += elapsed
+                    show_started += elapsed
+                    next_rainbow += elapsed
                     next_motion += elapsed
                     for replacement in pending:
                         pending[replacement] += elapsed
@@ -1341,7 +1348,7 @@ class MoleGame:
                         self._handle_ticket_event(line)
                     # Strike samples are ignored in both celebration modes.
                 moved = False
-                ready = [mole for mole, ready_at in pending.items() if now >= ready_at]
+                ready = [] if victory else [mole for mole, ready_at in pending.items() if now >= ready_at]
                 for mole in ready:
                     moved = True
                     pending.pop(mole)
@@ -1352,8 +1359,8 @@ class MoleGame:
                     self.arduino.send(f"LIGHT {mole} {r} {g} {b}")
                 if ready:
                     next_motion = now + motion_interval
-                if now >= next_motion and not pending:
-                    selected = set(random.sample(range(5), random.randint(1, 3 if victory else 2)))
+                if not victory and now >= next_motion and not pending:
+                    selected = set(random.sample(range(5), random.randint(1, 2)))
                     moved = moved or selected != raised
                     for mole in sorted(raised - selected):
                         self.arduino.send(f"MOLE {mole} DOWN")
@@ -1370,11 +1377,13 @@ class MoleGame:
                     next_motion = now + motion_interval
                 if victory and now >= next_rainbow:
                     for mole in range(5):
-                        rgb = colorsys.hsv_to_rgb((now / 3 + mole / 5) % 1, 1, 1)
+                        rgb = ((1, 0.65, 0) if (now - show_started) / seconds >= 0.9
+                               else colorsys.hsv_to_rgb(((now - show_started) / 3 + mole / 5) % 1, 1, 1))
                         r, g, b = (int(channel * 255) for channel in rgb)
                         self.arduino.send(f"LIGHT {mole} {r} {g} {b}", quiet=True)
                     for player in range(6):
-                        rgb = colorsys.hsv_to_rgb((now / 3 + player / 6) % 1, 1, 1)
+                        rgb = ((1, 0.65, 0) if (now - show_started) / seconds >= 0.9
+                               else colorsys.hsv_to_rgb(((now - show_started) / 3 + player / 6) % 1, 1, 1))
                         r, g, b = (int(channel * 255) for channel in rgb)
                         self.arduino.send(f"PLAYER_LIGHT {player} {r} {g} {b}", quiet=True)
                     next_rainbow = now + 0.5
@@ -1386,7 +1395,8 @@ class MoleGame:
             self._show_active = False
             self._show_raised = set()
             self.arduino.send("SENSORS DISABLE")
-            self.arduino.send("MOLES ALL DOWN")
+            if not victory:
+                self.arduino.send("MOLES ALL DOWN")
             self.arduino.send("LIGHTS OFF")
             try:
                 self.arduino.wait_until_idle()
@@ -1583,6 +1593,19 @@ class MoleGame:
             self.state = GameState()
             self._next_idle_frame = 0.0
             self.initialize_hardware()
+            self.arduino.wait_until_idle()
+            # Motor/outputs are off and LED reset is drained before reader reset.
+            # Set the cutoff BEFORE rearming so an immediate new badge is accepted.
+            self._accept_badges_after = time.monotonic()
+            submit = getattr(self.arduino, 'submit_command', None)
+            if callable(submit):
+                receipt = submit("RFID INIT", origin="health")
+                self.arduino.wait_until_idle()
+                if self.arduino.command_receipts(receipt['id'])['status'] != 'OK':
+                    self.log_state("RFID_REARM_FAILED")
+            else:
+                self.arduino.send("RFID INIT")
+                self.arduino.wait_until_idle()
             self.log_state("VICTORY_RESET_TO_IDLE")
 
 
@@ -1721,6 +1744,8 @@ class MoleGame:
             parts[1] in PLAYER_IDS
         ):
 
+            if received_at is not None and received_at <= self._accept_badges_after:
+                return
             self.handle_rfid(
                 parts[1]
             )

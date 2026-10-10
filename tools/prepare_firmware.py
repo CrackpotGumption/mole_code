@@ -6,7 +6,7 @@ import shutil
 import sys
 
 NAME = 'MOLE_FINAL_V3'
-VERSION = '3.0.1'
+VERSION = '3.0.3'
 
 def prepare(source, destination):
     source = Path(source)

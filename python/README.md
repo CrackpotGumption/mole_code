@@ -112,7 +112,6 @@ launcher with `sudo bash misc/linux_bash_daemon` after copying the new script:
 
 ```bash
 FAILURE_SECONDS=15
-VICTORY_SECONDS=45
 AUDIO_ENABLED=1
 AUDIO_DEVICE='default'
 ```
@@ -129,7 +128,7 @@ still need cabinet verification.
 ## Final victory celebration
 
 The sixth completed player starts a `VICTORY CELEBRATION` lasting
-`VICTORY_SECONDS` (default 45, allowed 0–120). Ticket payout starts alongside
+`VICTORY_SECONDS` in application settings (default 19, allowed 0–120). Ticket payout starts alongside
 this show, while all five mole lights and six player lights cycle through
 rainbow colors. Cheering, whistles, and an "oooooo"/kiss placeholder mix plays.
 A raised mole can be bashed: it retracts, the mix stops for an encouraging
@@ -149,9 +148,8 @@ itself off. These live reports don't change the earlier recovery guarantee:
 ticket request intent is saved, while delivery after power loss remains
 unconfirmed and is not automatically retried.
 
-Set `VICTORY_SECONDS=45` in cabinet.conf, copy/reinstall the updated launcher,
-and restart the cabinet service between games to apply it. The image and
-firmware both need updating. WAV replacements are described in `app/sounds`.
+Set victory duration through the application configuration API in maintenance.
+The launcher and image do not supply a victory timing environment variable.
 
 ## Standard cabinet mapping
 
@@ -403,3 +401,38 @@ FIFO tuning are disabled. Saved FIFO tuning is retired on startup.
 Publish the rebuilt image before restarting cabinet services; restarting an old
 container alone does not update its image. The installed launcher pulls the
 configured image before starting it, retaining its previous image on pull failure.
+
+
+Hardware health policy (app 3.2.28): hardware probes are informational. Missing
+sensors/MCP, stale or failed health reports, and new I2C timeout counts produce
+WARN while gameplay remains ready. Warnings name the affected hardware and
+connections to inspect. Statuses distinguish ACTIVE, INTERMITTENT,
+RECOVERY_PENDING, RECOVERING, RECOVERY_FAILED and RECOVERED. The most recent
+resolved problem remains visible, with warning history in diagnostics.
+After five consecutive failed probes, automatic repair runs during failure/victory shows, between players or
+in maintenance. Active puzzles defer it. Shows use HEALTH RECOVER KEEP_OUTPUTS,
+which resets Wire and retries sensor setup without resetting MCP output registers,
+sensing mode or ticket payout. Full idle/maintenance repair still resets MCP outputs. Failed repair leaves WARN, retains progress, and retries no sooner than
+60 seconds. Successful checks clear active warnings but retain the previous
+problem. Hardware availability does not block startup after its initial retries.
+Health HTTP 200 / ready=true means the controller can run the game, not that
+hardware is fault-free; inspect status=warn, warning and degraded fields.
+Serial loss, missing command ACKs, stopped workers and execution/persistence
+errors retain their stop/fault behavior. Firmware lease/watchdog remain enabled.
+Polling and firmware are unchanged.
+
+App 3.2.29 makes victory lights-only: no pneumatic commands are issued inside
+the victory show. Failure-show motion is retained. Victory audio/light duration
+is 19 seconds and payout requests seven tickets once. Victory duration comes only from application settings, with a 19-second default. Firmware stays V3 3.0.2.
+
+Post-victory RFID (app 3.2.30 / firmware V3 3.0.3): victory pauses card
+polling and turns off the antenna before the ticket motor starts. After the
+show, SAFE STOP turns the motor/outputs off, then idle LED commands drain and
+RFID INIT resets/re-enables the reader and antenna before new badges are
+processed. Badge events queued during the show are discarded by receipt time.
+Reader initialization errors remain diagnostic warnings. Victory is lights-only
+for 19 seconds; its seven-ticket request is issued once.
+
+The updated host launcher does not pass VICTORY_SECONDS. Victory timing belongs
+to application settings (19-second default). There is no victory timing migration or compatibility path. Explicit saved app
+settings are honored; host environment variables do not control victory duration.

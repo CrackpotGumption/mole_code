@@ -198,7 +198,7 @@ POST `/configuration` merges `settings` with existing overrides, persists settin
 | Setting | Accepted values | Default |
 | --- | --- | --- |
 | FAILURE_SECONDS | Number 0–120 | 15 |
-| VICTORY_SECONDS | Number 0–120 | 45 |
+| VICTORY_SECONDS | Number 0–120 | 19 |
 | IDLE_FRAME_SECONDS | Number 0.5–60 | 2 |
 | AUDIO_ENABLED | Integer 0/1 or string "0"/"1" | 1 |
 | AUDIO_DEVICE | String ≤128 characters, no control characters | usb |
@@ -354,3 +354,22 @@ See [SENSOR_DASHBOARD_API.md](SENSOR_DASHBOARD_API.md) for V3 capture-score obse
 ## Startup hardware recovery (3.2.20)
 
 Sensor initialization is sequential, with a 10 ms channel settle, 50 ms wake settle and 25 ms gap before the next healthy sensor; the range register is verified. `SENSOR_INIT_FAIL` logs identify mole, channel, failed step/register, readback and timeout flag. After the initial five health checks fail, the application can automatically reconnect before any game has initialized: up to three delayed attempts, waiting 30, 60 and 120 seconds after preceding failures. Maintenance suppresses these attempts. Firmware/serial startup errors without a hardware-readiness failure do not independently enable this recovery policy. Active games continue to use the separate state-preserving hardware repair path. `/diagnostics.startup_recovery` reports eligibility, attempts, max_attempts, queued and next_attempt_in_seconds. Exhaustion leaves the fault visible and manual POST `/recover` available.
+
+
+Hardware health policy (app 3.2.28): hardware probes are informational. Missing
+sensors/MCP, stale or failed health reports, and new I2C timeout counts produce
+WARN while gameplay remains ready. Warnings name the affected hardware and
+connections to inspect. Statuses distinguish ACTIVE, INTERMITTENT,
+RECOVERY_PENDING, RECOVERING, RECOVERY_FAILED and RECOVERED. The most recent
+resolved problem remains visible, with warning history in diagnostics.
+After five consecutive failed probes, automatic repair runs during failure/victory shows, between players or
+in maintenance. Active puzzles defer it. Shows use HEALTH RECOVER KEEP_OUTPUTS,
+which resets Wire and retries sensor setup without resetting MCP output registers,
+sensing mode or ticket payout. Full idle/maintenance repair still resets MCP outputs. Failed repair leaves WARN, retains progress, and retries no sooner than
+60 seconds. Successful checks clear active warnings but retain the previous
+problem. Hardware availability does not block startup after its initial retries.
+Health HTTP 200 / ready=true means the controller can run the game, not that
+hardware is fault-free; inspect status=warn, warning and degraded fields.
+Serial loss, missing command ACKs, stopped workers and execution/persistence
+errors retain their stop/fault behavior. Firmware lease/watchdog remain enabled.
+Polling and firmware are unchanged.

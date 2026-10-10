@@ -118,3 +118,40 @@ In maintenance, raise moles and enable sensors; detection continues after each
 500 ms cooldown. Disable sensors and lower moles afterward. Resume starts fresh.
 
 Verify parsing and continuity with `node portal/tests/test_sensors.js`.
+
+## Restore saved progress
+
+Controls includes **Restore saved game**. At startup, the portal reads up to 1000
+persisted game events for each reachable cabinet. It defaults to the last event
+from the previous logged game session, when present; otherwise the latest event.
+A snapshot selector lets the administrator choose another retained observation.
+The timestamp, event, session and logical restore payload are shown before use.
+Refresh saved history explicitly to fetch newer observations.
+
+Restore requires one confirmation, then waits for maintenance DONE, stages the
+validated logical progress, waits for DONE, and resumes. It replaces current
+progress and never requests tickets or a celebration. A failure stops the chain;
+POSTs are not retried. Check state and operations if communication is interrupted.
+History is bounded; a missing older session cannot be reconstructed by the UI.
+Nothing is automatically restored on portal or cabinet startup.
+
+Verify with `node portal/tests/test_restore.js`.
+
+
+Hardware health policy (app 3.2.28): hardware probes are informational. Missing
+sensors/MCP, stale or failed health reports, and new I2C timeout counts produce
+WARN while gameplay remains ready. Warnings name the affected hardware and
+connections to inspect. Statuses distinguish ACTIVE, INTERMITTENT,
+RECOVERY_PENDING, RECOVERING, RECOVERY_FAILED and RECOVERED. The most recent
+resolved problem remains visible, with warning history in diagnostics.
+After five consecutive failed probes, automatic repair runs during failure/victory shows, between players or
+in maintenance. Active puzzles defer it. Shows use HEALTH RECOVER KEEP_OUTPUTS,
+which resets Wire and retries sensor setup without resetting MCP output registers,
+sensing mode or ticket payout. Full idle/maintenance repair still resets MCP outputs. Failed repair leaves WARN, retains progress, and retries no sooner than
+60 seconds. Successful checks clear active warnings but retain the previous
+problem. Hardware availability does not block startup after its initial retries.
+Health HTTP 200 / ready=true means the controller can run the game, not that
+hardware is fault-free; inspect status=warn, warning and degraded fields.
+Serial loss, missing command ACKs, stopped workers and execution/persistence
+errors retain their stop/fault behavior. Firmware lease/watchdog remain enabled.
+Polling and firmware are unchanged.

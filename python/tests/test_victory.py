@@ -22,7 +22,7 @@ class VictoryTests(unittest.TestCase):
         output.__enter__()
         self.addCleanup(output.__exit__, None, None, None)
 
-    def test_45_second_victory_reports_tickets_without_hit_polling(self):
+    def test_19_second_victory_reports_tickets_without_hit_polling(self):
         clock = Clock()
         captured = []
         timing = []
@@ -51,8 +51,8 @@ class VictoryTests(unittest.TestCase):
                 patch('app.mole_game.random.sample', side_effect=[[0]] + [[1]] * 100), \
                 patch('app.mole_game.random.choice', side_effect=lambda items: items[0]):
             self.game.complete_full_game()
-        self.assertAlmostEqual(clock.now, 145)
-        self.audio.play_victory.assert_called_once_with(45)
+        self.assertAlmostEqual(clock.now, 119)
+        self.audio.play_victory.assert_called_once_with(19)
         self.audio.play_victory_hit.assert_not_called()
         self.audio.play_failure_hit.assert_not_called()
         self.assertNotIn('SENSORS ENABLE', self.hardware.commands)
@@ -73,6 +73,35 @@ class VictoryTests(unittest.TestCase):
         self.assertEqual(self.game.state.active_player, '001')
         self.assertEqual(self.game.state.status, 'PLAYING')
         self.assertFalse(self.game.state.ticket_dispensed)
+
+    def test_victory_is_lights_only_and_keeps_cue_duration(self):
+        clock = Clock()
+        with patch('app.mole_game.time.monotonic', side_effect=lambda: clock.now), \
+                patch('app.mole_game.time.sleep', side_effect=clock.sleep), \
+                patch('app.mole_game.random.sample', side_effect=AssertionError('random victory motion')):
+            self.game._run_show(20, victory=True)
+        self.audio.play_victory.assert_called_once_with(20)
+        self.assertAlmostEqual(clock.now, 120)
+        self.assertIn('LIGHT 0 255 165 0', self.hardware.commands)
+        self.assertFalse(any(c.startswith(('MOLE ', 'MOLES ')) for c in self.hardware.commands))
+        self.assertFalse(any(c.startswith('SENSORS ENABLE') for c in self.hardware.commands))
+
+    def test_victory_pauses_reader_and_rearms_after_motor_stop(self):
+        clock = Clock()
+        queued_badge_time = clock.now + 1
+        with patch('app.mole_game.time.monotonic', side_effect=lambda: clock.now), \
+                patch('app.mole_game.time.sleep', side_effect=clock.sleep):
+            self.game.complete_full_game()
+        commands = self.hardware.commands
+        self.assertLess(commands.index('RFID PAUSE'), commands.index('TICKET 7'))
+        self.assertLess(commands.index('SAFE STOP'), commands.index('RFID INIT'))
+        self.assertEqual(commands.count('RFID INIT'), 1)
+        self.assertEqual(commands.count('TICKET 7'), 1)
+        self.game.handle_arduino_event('RFID 001', received_at=queued_badge_time)
+        self.assertIsNone(self.game.state.active_player)
+        self.game.handle_arduino_event('RFID 001', received_at=clock.now + .01)
+        self.assertEqual(self.game.state.active_player, '001')
+        self.assertEqual(self.game.state.status, 'PLAYING')
 
     def test_ticket_timeout_and_configuration(self):
         self.game.handle_arduino_event('TICKET_START 7')

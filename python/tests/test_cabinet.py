@@ -7,7 +7,7 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from app.cabinet import Cabinet
+from app.cabinet import Cabinet, hardware_guidance
 from app.status_service import StatusService
 from test_mole_game import Hardware
 
@@ -58,6 +58,41 @@ class CabinetTests(unittest.TestCase):
         waiting = patch.object(self.stopped, 'wait', return_value=False)
         waiting.start()
         self.addCleanup(waiting.stop)
+    def test_hardware_messages_identify_sensor_and_where_to_check(self):
+        report = {'mcp_ready': True, 'sensor_mask': 29, 'rfid_ready': True, 'lease_enabled': False}
+        message = hardware_guidance(report, require_lease=True)
+        self.assertIn('Sensor 1 (DAPHNE, front center, mux channel 1)', message)
+        self.assertIn('SDA/SCL', message)
+        self.assertNotIn('keepalive', message)
+        self.assertNotIn('sensor_mask', message)
+        report['sensor_mask'] = 26
+        message = hardware_guidance(report)
+        self.assertIn('Sensor 0 (MARTIN, front left', message)
+        self.assertIn('Sensor 2 (NILES, front right', message)
+        self.assertNotIn('Sensor 1', message)
+        report['sensor_mask'] = 31
+        self.assertIn('keepalive', hardware_guidance(report, require_lease=True))
+        self.assertIn('USB', hardware_guidance(None))
+
+    def test_startup_missing_sensor_warns_and_preserves_raw_diagnostics(self):
+        self.controller.mask = 29
+        self.connect()
+        health = self.cabinet.health()
+        self.assertTrue(health['ready'])
+        self.assertEqual(health['phase'], 'WARN')
+        self.assertIn('Sensor 1 (DAPHNE, front center, mux channel 1)', health['warning']['message'])
+        self.assertEqual(self.cabinet._last_probe_report['sensor_mask'], 29)
+        self.assertIsNone(self.cabinet.fault)
+
+    def test_victory_duration_is_owned_by_app_settings(self):
+        with patch.dict('os.environ', {'VICTORY_SECONDS': '90'}):
+            upgraded = Cabinet(Mock(), '/dev/test', self.stopped)
+            self.assertEqual(upgraded.configuration()['VICTORY_SECONDS'], '19')
+            (self.root / 'runtime-settings.json').write_text(json.dumps({'VICTORY_SECONDS': 37}))
+            configured = Cabinet(Mock(), '/dev/test', self.stopped)
+            self.assertEqual(configured.configuration()['VICTORY_SECONDS'], '37')
+            self.assertEqual(json.loads((self.root / 'runtime-settings.json').read_text())['VICTORY_SECONDS'], 37)
+
     def test_fifo_configuration_and_serial_modes_are_disabled(self):
         for key, value in {'HIT_THRESHOLD_COUNTS': 4500, 'HIT_ARM_DELAY_MS': 1500,
                            'HIT_AXIS': 'Y', 'HIT_DEBUG': 1}.items():
@@ -82,11 +117,8 @@ class CabinetTests(unittest.TestCase):
         self.assertEqual(json.loads((self.root / 'runtime-settings.json').read_text()), {'FAILURE_SECONDS': 5})
 
     def test_startup_recovery_backoff_and_never_restarts_active_game(self):
-        self.controller.mask = 15
-        with patch('app.cabinet.connect_verified', return_value=self.controller):
-            with self.assertRaisesRegex(RuntimeError, '5 checks'):
-                self.cabinet._connect()
-        self.cabinet.latch_fault('startup hardware missing')
+        self.cabinet._startup_retry_eligible = True
+        self.cabinet.latch_fault('serial transport unavailable')
         with patch('app.cabinet.time.monotonic', return_value=100):
             self.cabinet._schedule_startup_retry()
         self.assertEqual(self.cabinet._startup_retry_at, 130)
@@ -122,14 +154,13 @@ class CabinetTests(unittest.TestCase):
     def connect(self):
         with patch('app.cabinet.connect_verified', return_value=self.controller):
             self.cabinet._connect()
-    def test_missing_hardware_is_a_visible_fault(self):
+    def test_missing_hardware_is_a_visible_warning(self):
         self.controller.mask = 15
-        with patch('app.cabinet.connect_verified', return_value=self.controller), self.assertRaisesRegex(RuntimeError, 'not ready'):
-            self.cabinet._connect()
-        self.cabinet.latch_fault('sensor missing')
-        self.assertFalse(self.cabinet.health()['ready'])
-        self.assertEqual(self.cabinet.get_state_dict()['controller']['fault']['message'], 'sensor missing')
-        self.assertTrue((self.root / 'fault-history.json').is_file())
+        self.connect()
+        self.assertTrue(self.cabinet.health()['ready'])
+        self.assertIn('Sensor 4 (ROZ, back right', self.cabinet.health()['warning']['message'])
+        self.assertIsNone(self.cabinet.fault)
+
     def test_stale_health_and_game_errors_stop_outputs(self):
         self.connect()
         self.controller.event_failure = 'unexpected puzzle exception'
@@ -262,8 +293,89 @@ class CabinetTests(unittest.TestCase):
             if attempt < 5:
                 self.assertIsNone(self.cabinet.fault)
                 self.assertTrue(self.cabinet.health()['ready'])
-        self.assertEqual(self.cabinet.phase, 'FAULT')
+        self.assertEqual(self.cabinet.phase, 'READY')
+        self.assertEqual(self.cabinet.health()['phase'], 'WARN')
+        self.assertIsNone(self.cabinet.fault)
         self.assertEqual(self.cabinet.actions.get_nowait()[1], 'repair_hardware')
+
+    def test_active_puzzle_warning_does_not_stop_or_repair_outputs(self):
+        self.connect()
+        game = self.cabinet.game
+        game.handle_rfid('002')
+        game.state.completed_players = {'001'}
+        game.state.hit_progress = 2
+        before = game.get_state_dict()
+        commands = len(self.controller.records)
+        self.controller.mask = 29
+        self.cabinet.health_retry_at = 0
+        for attempt in range(1, 6):
+            self.cabinet._poll_health(attempt * 4)
+            self.cabinet._poll_health(attempt * 4 + .1)
+        self.assertEqual(game.get_state_dict(), before)
+        self.assertFalse(game._stopping)
+        self.assertEqual(self.cabinet.health()['warning']['status'], 'RECOVERY_PENDING')
+        self.assertTrue(self.cabinet.health()['ready'])
+        self.assertTrue(self.cabinet.actions.empty())
+        self.assertFalse(any(r['command'] in ('SAFE STOP', 'SENSORS DISABLE', 'HEALTH RECOVER')
+                             for r in self.controller.records[commands:]))
+        result = self.cabinet._act('recover', {})
+        self.assertTrue(result['deferred'])
+        self.assertEqual(game.get_state_dict(), before)
+
+    def test_failed_idle_recovery_warns_and_success_keeps_previous_problem(self):
+        self.connect()
+        self.controller.mask = 29
+        self.cabinet._last_probe_report = self.controller.get_diagnostics()['hardware_health']
+        self.cabinet._warn_hardware(self.cabinet._last_probe_report)
+        result = self.cabinet._act('repair_hardware', {})
+        self.assertFalse(result['recovered'])
+        self.assertEqual(self.cabinet.health()['warning']['status'], 'RECOVERY_FAILED')
+        self.assertIn('Sensor 1', self.cabinet.health()['warning']['message'])
+        self.assertTrue(self.cabinet.health()['ready'])
+        self.assertIsNone(self.cabinet.fault)
+        self.controller.mask = 31
+        self.cabinet._act('repair_hardware', {})
+        self.assertEqual(self.cabinet.health()['warning']['status'], 'RECOVERED')
+        self.assertIn('Sensor 1', self.cabinet.health()['warning']['message'])
+        self.assertEqual(self.cabinet.health()['status'], 'ok')
+
+    def test_show_repair_preserves_outputs_tickets_and_does_not_wait_for_event_lock(self):
+        self.connect()
+        game = self.cabinet.game
+        game.state.active_player = '002'
+        game.state.ticket_status = 'DISPENSING'
+        game._show_active = True
+        game._show_raised = {0, 3}
+        before = game.get_state_dict()
+        count = len(self.controller.records)
+        results = []
+        # The show owns this lock in the game event thread. Repair must run now.
+        with game._event_lock:
+            worker = threading.Thread(target=lambda: results.append(self.cabinet._act('repair_hardware', {})))
+            worker.start()
+            worker.join(timeout=1)
+            self.assertFalse(worker.is_alive())
+        self.assertTrue(results[0]['recovered'])
+        self.assertEqual(game.get_state_dict(), before)
+        self.assertEqual(game._show_raised, {0, 3})
+        commands = [r['command'] for r in self.controller.records[count:]]
+        self.assertEqual(commands, ['HEALTH RECOVER KEEP_OUTPUTS'])
+        self.assertNotIn('TICKET 7', self.controller.commands)
+        self.assertFalse(game._hardware_paused)
+
+    def test_timeouts_warn_despite_successful_health_probe(self):
+        self.connect()
+        original = self.controller.get_diagnostics
+        self.controller.get_diagnostics = lambda: {**original(), 'i2c_timeout_count': 12}
+        self.cabinet.health_retry_at = 0
+        self.cabinet._poll_health(0)
+        self.cabinet._poll_health(.1)
+        self.assertEqual(self.cabinet.health()['warning']['status'], 'INTERMITTENT')
+        self.assertIn('12 new I2C timeouts', self.cabinet.health()['warning']['message'])
+        self.assertTrue(self.cabinet.health()['ready'])
+        self.cabinet._poll_health(11)
+        self.cabinet._poll_health(11.1)
+        self.assertEqual(self.cabinet.health()['warning']['status'], 'RECOVERED')
 
     def test_recovery_preserves_player_progress_and_same_controller(self):
         self.connect()

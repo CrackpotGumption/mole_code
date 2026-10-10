@@ -49,7 +49,6 @@ EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
 ENV GAME_LOG_PATH=/data/game-events.jsonl
 ENV FAILURE_SECONDS=15
-ENV VICTORY_SECONDS=45
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('STATUS_PORT', '8080') + '/health', timeout=2).read()"

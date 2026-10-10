@@ -53,6 +53,7 @@ const unsigned long SENSOR_INTERVAL = 10;
 const unsigned long RFID_POLL_INTERVAL = 250;
 unsigned long lastRFIDPoll = 0;
 bool rfidReaderAvailable = false;
+bool rfidPollingEnabled = true;
 
 // I2C / main-loop diagnostics.
 
@@ -2310,6 +2311,7 @@ void handleCommand(
 ) {
 
   command.trim();
+  bool preserveMcpOutputs = false;
   if (command == "HIT_DEBUG ON" || command == "HIT_DEBUG OFF"
       || command == "SENSORS PUZZLE" || command.startsWith("SENSORS FIFO")) {
     commandFailed = true;
@@ -2330,23 +2332,25 @@ void handleCommand(
     turnAllMoleLightsOff(); clearPlayerLights();
     Serial.println("OK SAFE STOP"); return;
   }
-  if (command == "HEALTH RECOVER") {
-    // Probe on a quiet bus; Python preserves an active game during repair.
-    hitDetectionEnabled = false;
+  if (command == "HEALTH RECOVER" || command == "HEALTH RECOVER KEEP_OUTPUTS") {
+    preserveMcpOutputs = command == "HEALTH RECOVER KEEP_OUTPUTS";
+    // Show recovery preserves output registers, sensing mode and ticket payout.
+    if (!preserveMcpOutputs) hitDetectionEnabled = false;
     Wire.end(); Wire.begin(); Wire.setWireTimeout(I2C_TIMEOUT_US, true);
     Wire.beginTransmission(TCA_ADDRESS); Wire.write((uint8_t)0); Wire.endTransmission();
-    mcpInitialized = false; sensorConfiguredMask = 0;
+    if (!preserveMcpOutputs) mcpInitialized = false;
+    sensorConfiguredMask = 0;
     command = "HEALTH";
   }
   if (command == "HEALTH") {
-    if (!mcpInitialized) {
+    if (!mcpInitialized && !preserveMcpOutputs) {
       mcpInitialized = mcp.begin_I2C();
       if (mcpInitialized) for (uint8_t id = 0; id < MOLE_COUNT; id++) {
         mcp.pinMode(solenoidOutput[id], OUTPUT); mcp.digitalWrite(solenoidOutput[id], LOW);
       }
     }
     Wire.beginTransmission(0x20); uint8_t mcpError = Wire.endTransmission(); mcpReady = mcpInitialized && mcpError == 0;
-    if (mcpReady && stopOutputsPending) {
+    if (mcpReady && stopOutputsPending && !preserveMcpOutputs) {
       setAllMoles(false);
       if (mcpReady && !Wire.getWireTimeoutFlag()) stopOutputsPending = false;
     }
@@ -2957,8 +2961,17 @@ void handleCommand(
 
   }
 
+  if (command == "RFID PAUSE") {
+    rfidPollingEnabled = false;
+    rfid.PCD_AntennaOff();
+    Serial.println("OK RFID PAUSED"); return;
+  }
   if (command == "RFID INIT") {
-    if (initializeRFIDReader()) Serial.println("OK RFID INIT");
+    rfidPollingEnabled = false;
+    if (initializeRFIDReader()) {
+      rfidPollingEnabled = true; lastRFIDPoll = 0;
+      Serial.println("OK RFID INIT");
+    }
     else { commandFailed = true; Serial.println("ERROR RFID INIT FAILED"); }
     return;
   }
@@ -3370,7 +3383,7 @@ void loop() {
   checkForHits();
   updateTickets();
   unsigned long now = millis();
-  if (rfidReaderAvailable && now - lastRFIDPoll >= RFID_POLL_INTERVAL) {
+  if (rfidPollingEnabled && rfidReaderAvailable && now - lastRFIDPoll >= RFID_POLL_INTERVAL) {
     checkRFID();
     lastRFIDPoll = millis();
   }

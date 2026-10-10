@@ -138,7 +138,7 @@ class StatusService:
                                                     'restore': {'state': {'completed_players': ['001'], 'active_player': None, 'hit_progress': 0}, 'confirm': 'RESTORE GAME'},
                                                     'firmware_retry': {'confirm': 'FLASH MEGA'},
                                                     'os_update': {'action': 'os_update', 'confirm': 'UPDATE OS'},
-                                                    'configuration': {'settings': {'FAILURE_SECONDS': 15, 'VICTORY_SECONDS': 45, 'IDLE_FRAME_SECONDS': 2}}},
+                                                    'configuration': {'settings': {'FAILURE_SECONDS': 15, 'VICTORY_SECONDS': 19, 'IDLE_FRAME_SECONDS': 2}}},
                                                 'notes': ['Queued is not executed; inspect receipts/operations',
                                                           'Raw hardware changes and host actions require maintenance',
                                                           'Host details require the host agent']})
