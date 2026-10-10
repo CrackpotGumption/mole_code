@@ -111,10 +111,10 @@ observations, retaining legacy FIFO parsing for older recordings. It deduplicate
 by controller session, timestamp and line and marks potential gaps. Capture is
 bounded to 5000 observations; export before closing the tab.
 
-The chart shows each mole's largest XYZ range in a shared 15 ms capture. Scores
-of -1 denote mechanically suppressed moles. The firmware requires 10,000 counts
+The chart shows each mole's largest XYZ range in a shared 75 ms capture. Scores
+below zero denote ineligible capture data. The firmware requires 10,000 counts
 and a 15% winning margin. Live FIFO tuning and FIFO bench commands are disabled.
 In maintenance, raise moles and enable sensors; detection continues after each
-125 ms cooldown. Disable sensors and lower moles afterward. Resume starts fresh.
+500 ms cooldown. Disable sensors and lower moles afterward. Resume starts fresh.
 
 Verify parsing and continuity with `node portal/tests/test_sensors.js`.

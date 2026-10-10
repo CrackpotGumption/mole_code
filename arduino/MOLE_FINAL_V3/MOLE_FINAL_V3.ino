@@ -1,4 +1,4 @@
-// V3: V2 cabinet controls with the verbatim V1 hit-detection implementation.
+// V3: V2 cabinet controls with the verbatim September hit-detection implementation.
 #include "firmware_identity.h"
 #ifdef __AVR__
 #include <avr/wdt.h>
@@ -48,7 +48,7 @@ const unsigned long CONTROLLER_LEASE_MS = 5000;
 const uint8_t accelerometerInterruptPin[MOLE_COUNT] = {A8, A9, A10, A11, A12};
 
 const long HIT_REPORT_THRESHOLD = 4000;
-const unsigned long HIT_COOLDOWN = 125;
+const unsigned long HIT_COOLDOWN = 500;
 const unsigned long SENSOR_INTERVAL = 10;
 const unsigned long RFID_POLL_INTERVAL = 250;
 unsigned long lastRFIDPoll = 0;
@@ -309,14 +309,13 @@ const unsigned long TICKET_TIMEOUT_PER_TICKET = 2000;
 
 // ============================================================
 
-// V1 HIT DETECTION STATE
+// SEPTEMBER HIT DETECTION STATE
 
 // ============================================================
 
 bool hitDetectionEnabled = false;
 unsigned long lastSensorPoll = 0;
-const unsigned long MOLE_MECHANICAL_SUPPRESS_MS = 300;
-unsigned long moleMechanicalSuppressUntil[MOLE_COUNT] = {};
+const unsigned long MECHANICAL_SETTLE_TIME = 750;
 
 unsigned long lastMechanicalAction = 0;
 
@@ -718,9 +717,9 @@ bool configureAccelerometerRange(
 
 // ============================================================
 
-// V1 hit acquisition and classification, copied verbatim from MOLE_FINAL_V1.
+// September hit acquisition and classification, copied verbatim from sketch_sep13a.
 // Health samples are separate and do not participate in impact capture.
-void enableSensorReporting() { hitDetectionEnabled = true; }
+void enableSensorReporting() { hitDetectionEnabled = true; lastMechanicalAction = millis(); }
 
 void checkForHits() {
 
@@ -729,6 +728,13 @@ void checkForHits() {
   }
 
   unsigned long now = millis();
+
+  if (
+    now - lastMechanicalAction
+    < MECHANICAL_SETTLE_TIME
+  ) {
+    return;
+  }
 
   if (
     now - lastSensorPoll
@@ -746,10 +752,6 @@ void checkForHits() {
   bool impactTriggered = false;
 
   for (int mole = 0; mole < MOLE_COUNT; mole++) {
-
-    if ((long)(moleMechanicalSuppressUntil[mole] - now) > 0) {
-      continue;
-    }
 
     int16_t x;
     int16_t y;
@@ -795,7 +797,7 @@ void checkForHits() {
     maxZ[mole] = -32768;
   }
 
-  const unsigned long IMPACT_CAPTURE_MS = 15;
+  const unsigned long IMPACT_CAPTURE_MS = 75;
   unsigned long captureStart = millis();
 
   while (millis() - captureStart < IMPACT_CAPTURE_MS) {
@@ -841,11 +843,6 @@ void checkForHits() {
   long runnerUpScore = -1;
 
   for (int mole = 0; mole < MOLE_COUNT; mole++) {
-
-    if ((long)(moleMechanicalSuppressUntil[mole] - millis()) > 0) {
-      scores[mole] = -1;
-      continue;
-    }
 
     long xRange =
       (long)maxX[mole] - (long)minX[mole];
@@ -938,7 +935,6 @@ void checkForHits() {
 
 
 // ============================================================
-
 // MOLE CONTROL
 
 // ============================================================
@@ -978,7 +974,6 @@ void setMole(
     commandFailed = true; mcpReady = false; stopOutputsPending = true; Serial.println("ERROR OUTPUT READBACK FAILED");
   }
   unsigned long movementTime = millis();
-  moleMechanicalSuppressUntil[mole] = movementTime + MOLE_MECHANICAL_SUPPRESS_MS;
   lastMechanicalAction = movementTime;
 
 }
@@ -1016,9 +1011,6 @@ void setAllMoles(
   }
 
   unsigned long movementTime = millis();
-  for (int mole = 0; mole < MOLE_COUNT; mole++) {
-    moleMechanicalSuppressUntil[mole] = movementTime + MOLE_MECHANICAL_SUPPRESS_MS;
-  }
   lastMechanicalAction = movementTime;
 
 }

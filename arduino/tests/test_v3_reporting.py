@@ -1,4 +1,4 @@
-"""Verify V3 reproduces V1 hit detection while retaining V2 controls."""
+"""Verify V3 reproduces September hit detection while retaining V2 controls."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -14,19 +14,19 @@ def detection(source):
 
 
 class V3V1DetectionTests(unittest.TestCase):
-    def test_detection_is_verbatim_v1(self):
-        v1 = (ROOT / 'MOLE_FINAL_V1/MOLE_FINAL_V1.ino').read_text()
+    def test_detection_is_verbatim_september(self):
+        v1 = (ROOT / 'sketch_sep13a/sketch_sep13a.ino').read_text()
         v3 = (ROOT / 'MOLE_FINAL_V3/MOLE_FINAL_V3.ino').read_text()
         self.assertEqual(detection(v1), detection(v3))
-        for constant in ('HIT_REPORT_THRESHOLD = 4000', 'HIT_COOLDOWN = 125',
-                         'SENSOR_INTERVAL = 10', 'MOLE_MECHANICAL_SUPPRESS_MS = 300'):
+        for constant in ('HIT_REPORT_THRESHOLD = 4000', 'HIT_COOLDOWN = 500',
+                         'SENSOR_INTERVAL = 10', 'MECHANICAL_SETTLE_TIME = 750'):
             self.assertIn(constant, v3)
         for retained in ('"SAFE STOP"', '"HEALTH RECOVER"', '"LEASE ON"', '"KEEPALIVE"',
                          'Wire.setWireTimeout', 'wdt_reset()', '"ACK "', 'updateTickets();'):
             self.assertIn(retained, v3)
         for removed in ('checkFifoHits', 'fifoArmed', 'puzzleLatched', '"DELTA "', '"ACCEL "'):
             self.assertNotIn(removed, v3)
-        self.assertIn('moleMechanicalSuppressUntil[mole] = movementTime + MOLE_MECHANICAL_SUPPRESS_MS;', v3)
+        self.assertIn('lastMechanicalAction = millis();', v3)
 
     def test_trigger_capture_cooldown_and_suppression(self):
         source = (ROOT / 'MOLE_FINAL_V3/MOLE_FINAL_V3.ino').read_text()
@@ -40,10 +40,11 @@ class V3V1DetectionTests(unittest.TestCase):
 using std::max;
 #define MOLE_COUNT 5
 const long HIT_REPORT_THRESHOLD = 4000;
-const unsigned long HIT_COOLDOWN = 125, SENSOR_INTERVAL = 10;
+const unsigned long HIT_COOLDOWN = 500, SENSOR_INTERVAL = 10;
 bool hitDetectionEnabled = false;
 unsigned long lastSensorPoll = 0, clockMs = 0;
-unsigned long moleMechanicalSuppressUntil[5] = {};
+const unsigned long MECHANICAL_SETTLE_TIME = 750;
+unsigned long lastMechanicalAction = 0;
 const uint8_t sensorChannel[5] = {0,1,2,3,4};
 int calls[5] = {};
 unsigned long millis() { return clockMs; }
@@ -65,15 +66,17 @@ struct Logger {
 int main() {
   checkForHits(); assert(calls[0] == 0);
   hitDetectionEnabled = true; clockMs = 9; checkForHits(); assert(calls[0] == 0);
-  clockMs = 10; checkForHits();
+  clockMs = 749; checkForHits(); assert(calls[0] == 0);
+  clockMs = 750; checkForHits();
   assert(Serial.buffer.str().find("HIT 0 0 12000") != std::string::npos);
   assert(calls[0] >= 3);
   for (int id = 1; id < 5; id++) assert(calls[id] > 0);
-  assert(clockMs == 151); // 1 ms trigger read + shared 15 ms capture + 125 ms cooldown.
+  assert(clockMs == 1326); // 1 ms trigger read + shared 75 ms capture + 500 ms cooldown.
   Serial.buffer.str(""); auto before = calls[0];
-  moleMechanicalSuppressUntil[0] = clockMs + 300;
+  lastMechanicalAction = clockMs;
   checkForHits(); assert(calls[0] == before);
   assert(Serial.buffer.str().empty());
+  for (int id = 1; id < 5; id++) assert(calls[id] == 15); // Global settling skipped all reads.
 }
 '''
         with tempfile.TemporaryDirectory() as folder:

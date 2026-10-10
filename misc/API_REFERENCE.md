@@ -1,6 +1,6 @@
 # Mole cabinet API reference
 
-Implementation baseline: application **3.2.0**, firmware **3.0.0**, host agent **3.0.1**, discovery API version **1**. This describes the shipped implementation, including integration limitations. Machine-readable contract: [OpenAPI 3.1](openapi.json). Installation guide: [API deployment](API.md).
+Implementation baseline: application **3.2.0**, firmware **3.0.1**, host agent **3.0.1**, discovery API version **1**. This describes the shipped implementation, including integration limitations. Machine-readable contract: [OpenAPI 3.1](openapi.json). Installation guide: [API deployment](API.md).
 
 ## Connection and protocol
 
@@ -207,9 +207,8 @@ POST `/configuration` merges `settings` with existing overrides, persists settin
 | LOG_RAINBOW_COMMANDS | 0/1 or string equivalent | 0 |
 | FIRMWARE_AUTO_FLASH | 0/1 or string equivalent | 1 |
 
-V3 uses V1's 10 ms trigger scan, shared 15 ms range capture, 10,000-count
-minimum, 15% winning margin, 125 ms cooldown and 300 ms suppression of moved
-moles. FIFO mode and live FIFO tuning are disabled. Saved FIFO settings are
+V3 uses the September sketches' 10 ms trigger scan, shared 75 ms range capture, 10,000-count
+minimum, 15% winning margin, 500 ms cooldown and 750 ms global settling after movement. FIFO mode and live FIFO tuning are disabled. Saved FIFO settings are
 retired automatically during upgrade; new requests for them are rejected.
 Configuration changes require maintenance. `SENSORS ENABLE` starts continuous
 classified hit reporting; `SENSORS DISABLE` stops it.

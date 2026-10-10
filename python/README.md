@@ -4,7 +4,7 @@
 > /serial game relay, then apply it with /resume. See [API guide](../misc/API.md).
 > Legacy checkpoint/recovery instructions below no longer apply.
 
-> Application/firmware 3.0.0 uses an API-first controller. See
+> Application/firmware 3.0.1 uses an API-first controller. See
 > [cabinet API guide](../misc/API.md) for current controls and recovery.
 > The API stays available during hardware faults and flashing; it no longer exits
 > immediately on serial failure. Historical serial troubleshooting notes below
@@ -373,7 +373,7 @@ persistent Docker volume.
 
 ### Cabinet diagnostics and solve state
 
-`GET /diagnostics` reports application version (`3.0.0`), exact source hash, build
+`GET /diagnostics` reports application version (`3.0.1`), exact source hash, build
 time/revision (when supplied), Python/pyserial, container platform, firmware
 identities, serial queue/thread state, last received ACK, recent errors and I2C
 counts, sensor/RFID reports, checkpoint/storage information, audio configuration
@@ -395,8 +395,8 @@ No credentials or complete environment variables are included.
 See `misc/ERROR_HANDLING_REVIEW.md` for current limitations and recovery additions.
 
 
-V3 default deployment (application 3.2.22): the image bundles MOLE_FINAL_V3
-3.0.0 with V1 hit detection and V2 cabinet controls. Startup verifies the bundled
+V3 default deployment (application 3.2.23): the image bundles MOLE_FINAL_V3
+3.0.1 with V1 hit detection and V2 cabinet controls. Startup verifies the bundled
 identity and automatically flashes mismatched firmware when FIRMWARE_AUTO_FLASH
 is enabled (default). Gameplay and recovery use SENSORS ENABLE; FIFO modes and
 FIFO tuning are disabled. Saved FIFO tuning is retired on startup.
