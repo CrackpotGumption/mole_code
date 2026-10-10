@@ -55,6 +55,9 @@ class CabinetTests(unittest.TestCase):
         self.controller = Controller()
         self.cabinet = Cabinet(Mock(), '/dev/test', self.stopped)
         self.addCleanup(self.cleanup)
+        waiting = patch.object(self.stopped, 'wait', return_value=False)
+        waiting.start()
+        self.addCleanup(waiting.stop)
     def cleanup(self):
         self.stopped.set()
         self.cabinet.close()
@@ -186,3 +189,68 @@ class CabinetTests(unittest.TestCase):
         for value in (-1, 401, True, float('nan')):
             with self.assertRaises(ValueError):
                 self.cabinet._act('audio', {'volume_percent': value})
+
+    def test_health_retries_require_five_distinct_failed_receipts(self):
+        self.connect()
+        self.cabinet.health_retry_at = 0
+        self.controller.mask = 15
+        for attempt in range(1, 6):
+            now = attempt * 4
+            self.cabinet._poll_health(now)
+            self.cabinet._poll_health(now + .1)
+            self.assertEqual(self.cabinet.health_failures, attempt)
+            self.cabinet._poll_health(now + .2)
+            self.assertEqual(self.cabinet.health_failures, attempt)
+            if attempt < 5:
+                self.assertIsNone(self.cabinet.fault)
+                self.assertTrue(self.cabinet.health()['ready'])
+        self.assertEqual(self.cabinet.phase, 'FAULT')
+        self.assertEqual(self.cabinet.actions.get_nowait()[1], 'repair_hardware')
+
+    def test_recovery_preserves_player_progress_and_same_controller(self):
+        self.connect()
+        self.cabinet.game.handle_rfid('002')
+        self.cabinet.game.state.completed_players = {'001'}
+        self.cabinet.game.state.hit_progress = 2
+        game, state, controller = self.cabinet.game, self.cabinet.game.state, self.cabinet.arduino
+        before = game.get_state_dict()
+        self.cabinet.latch_fault('temporary sensor loss')
+        result = self.cabinet._act('repair_hardware', {})
+        self.assertTrue(result['game_preserved'])
+        self.assertIs(self.cabinet.game, game)
+        self.assertIs(game.state, state)
+        self.assertIs(self.cabinet.arduino, controller)
+        self.assertEqual(game.get_state_dict(), before)
+        self.assertIsNone(self.cabinet.fault)
+        self.assertEqual(self.cabinet.phase, 'READY')
+        self.assertFalse(game._stopping)
+        self.assertIn('HEALTH RECOVER', [r['command'] for r in controller.records])
+        self.assertNotIn('TICKET 7', controller.commands)
+
+    def test_fault_flashes_all_moles_and_player_strip_red(self):
+        self.connect()
+        self.cabinet.latch_fault('test fault')
+        self.cabinet._flash_fault(100)
+        commands = [r['command'] for r in self.controller.records]
+        for mole in range(5):
+            self.assertIn(f'LIGHT {mole} 255 0 0', commands)
+        self.assertIn('PLAYER_LIGHTS 255 0 0', commands)
+        self.cabinet._flash_fault(100.5)
+        self.assertEqual(self.controller.records[-1]['command'], 'PLAYER_LIGHTS 0 0 0')
+
+    def test_successful_health_retry_clears_streak_and_returns_to_ten_seconds(self):
+        self.connect()
+        self.cabinet.health_retry_at = 0
+        self.controller.mask = 15
+        self.cabinet._poll_health(100)
+        self.cabinet._poll_health(100.1)
+        self.assertEqual(self.cabinet.health_failures, 1)
+        count = len(self.controller.records)
+        self.cabinet._poll_health(102)
+        self.assertEqual(len(self.controller.records), count)
+        self.controller.mask = 31
+        self.cabinet._poll_health(103.2)
+        self.cabinet._poll_health(103.3)
+        self.assertEqual(self.cabinet.health_failures, 0)
+        self.assertAlmostEqual(self.cabinet.health_retry_at, 113.3)
+        self.assertIsNone(self.cabinet.fault)

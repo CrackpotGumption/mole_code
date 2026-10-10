@@ -1,0 +1,27 @@
+{
+  "updates": {
+    "fwupd": {
+      "type": "package",
+      "since": "2026.10.09",
+      "days": 1
+    },
+    "linux-meta-hwe-7.0": {
+      "type": "kernel",
+      "since": "2026.10.09",
+      "days": 1
+    },
+    "linux-firmware": {
+      "type": "package",
+      "since": "2026.10.09",
+      "days": 1
+    },
+    "mintreport": {
+      "type": "package",
+      "since": "2026.10.09",
+      "days": 1
+    }
+  },
+  "version": 1,
+  "checked": "2026.10.09",
+  "notified": "2026.10.08"
+}

@@ -22,7 +22,7 @@ class VictoryTests(unittest.TestCase):
         output.__enter__()
         self.addCleanup(output.__exit__, None, None, None)
 
-    def test_45_second_victory_ticket_events_and_interrupting_strike(self):
+    def test_45_second_victory_reports_tickets_without_hit_polling(self):
         clock = Clock()
         captured = []
         timing = []
@@ -53,11 +53,10 @@ class VictoryTests(unittest.TestCase):
             self.game.complete_full_game()
         self.assertAlmostEqual(clock.now, 145)
         self.audio.play_victory.assert_called_once_with(45)
-        self.audio.play_victory_hit.assert_called_once()
+        self.audio.play_victory_hit.assert_not_called()
         self.audio.play_failure_hit.assert_not_called()
-        down = next(t for t, command in timing if command == 'MOLE 0 DOWN')
-        replacement = next(t for t, command in timing if command == 'MOLE 1 UP')
-        self.assertGreaterEqual(replacement - down, 0.2 - 0.0001)
+        self.assertNotIn('SENSORS ENABLE', self.hardware.commands)
+        self.assertIn('SENSORS DISABLE', self.hardware.commands)
         self.assertEqual(self.game.state.completed_players, set())
         self.assertEqual(self.game.state.status, 'WAITING FOR BADGE')
         self.assertEqual(self.game.state.ticket_status, 'NOT REQUESTED')

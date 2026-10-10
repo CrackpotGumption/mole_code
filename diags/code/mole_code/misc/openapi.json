@@ -1,0 +1,3103 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Mole Cabinet Administration API",
+    "version": "1",
+    "description": "Shipped application 3.2.0 / firmware 3.0.0. No authentication. See API_REFERENCE.md for asynchronous lifecycles, field availability, maintenance rules and workflows. Extensible telemetry objects preserve raw platform-dependent reports."
+  },
+  "servers": [
+    {
+      "url": "http://mole4.local:8080",
+      "description": "Example; replace with cabinet hostname or IP"
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/api": {
+      "get": {
+        "operationId": "get_api",
+        "summary": "Discovery/version inventory",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "get_health",
+        "summary": "Read gameplay readiness",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "API reachable but gameplay not ready; runtime/overload may instead return error or empty body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/state": {
+      "get": {
+        "operationId": "get_state",
+        "summary": "Read game state",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/diagnostics": {
+      "get": {
+        "operationId": "get_diagnostics",
+        "summary": "Read application and hardware diagnostics",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Diagnostics"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commands": {
+      "get": {
+        "operationId": "get_commands",
+        "summary": "List current-controller command receipts",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Receipt"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Include controller session to avoid matching a replacement connection."
+          }
+        ]
+      }
+    },
+    "/commands/{id}": {
+      "get": {
+        "operationId": "get_commands_id",
+        "summary": "Read a command receipt",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Include controller session to avoid matching a replacement connection."
+          }
+        ]
+      }
+    },
+    "/operations": {
+      "get": {
+        "operationId": "get_operations",
+        "summary": "List cabinet operations",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Operation"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/{id}": {
+      "get": {
+        "operationId": "get_operations_id",
+        "summary": "Read cabinet operation",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/configuration": {
+      "get": {
+        "operationId": "get_configuration",
+        "summary": "Read desired application configuration",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Configuration"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_configuration",
+        "summary": "Persist desired settings in maintenance",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "settings": {
+                    "$ref": "#/components/schemas/ApplicationSettings"
+                  }
+                },
+                "required": [
+                  "settings"
+                ],
+                "additionalProperties": true
+              },
+              "example": {
+                "settings": {
+                  "FAILURE_SECONDS": 15
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/firmware": {
+      "get": {
+        "operationId": "get_firmware",
+        "summary": "Read persistent firmware history",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audio": {
+      "get": {
+        "operationId": "get_audio",
+        "summary": "Read audio diagnostics",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audio"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_audio",
+        "summary": "Test cue or STOP in maintenance",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cue": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "cue"
+                ],
+                "additionalProperties": true
+              },
+              "example": {
+                "cue": "STOP"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/game/events": {
+      "get": {
+        "operationId": "get_game_events",
+        "summary": "Read observed game event tail",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100
+            }
+          }
+        ]
+      }
+    },
+    "/host": {
+      "get": {
+        "operationId": "get_host",
+        "summary": "Read live host telemetry",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Host"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/host/configuration": {
+      "get": {
+        "operationId": "get_host_configuration",
+        "summary": "Read launcher configuration",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/host/packages": {
+      "get": {
+        "operationId": "get_host_packages",
+        "summary": "Read package/version text",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/host/jobs": {
+      "get": {
+        "operationId": "get_host_jobs",
+        "summary": "Read persistent host jobs",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HostJob"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logs": {
+      "get": {
+        "operationId": "get_logs",
+        "summary": "Read system/container logs",
+        "responses": {
+          "200": {
+            "description": "Observed response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Logs"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000,
+              "default": 200
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "ISO 8601; timezone-free interpreted UTC"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "ISO 8601; timezone-free interpreted UTC"
+            }
+          }
+        ]
+      }
+    },
+    "/maintenance": {
+      "post": {
+        "operationId": "post_maintenance",
+        "summary": "Enter maintenance",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/resume": {
+      "post": {
+        "operationId": "post_resume",
+        "summary": "Reconnect fresh or apply staged restore",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/recover": {
+      "post": {
+        "operationId": "post_recover",
+        "summary": "Reconnect fresh; maintenance required if READY",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/game/badge": {
+      "post": {
+        "operationId": "post_game_badge",
+        "summary": "Submit badge; requires ready game",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "player": {
+                    "type": "string",
+                    "enum": [
+                      "001",
+                      "002",
+                      "003",
+                      "004",
+                      "005",
+                      "006"
+                    ]
+                  }
+                },
+                "required": [
+                  "player"
+                ],
+                "additionalProperties": true
+              },
+              "example": {
+                "player": "001"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/game/reset": {
+      "post": {
+        "operationId": "post_game_reset",
+        "summary": "Reset game in maintenance",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirm": {
+                    "const": "RESET GAME"
+                  }
+                },
+                "required": [
+                  "confirm"
+                ],
+                "additionalProperties": true
+              },
+              "example": {
+                "confirm": "RESET GAME"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/game/restore": {
+      "post": {
+        "operationId": "post_game_restore",
+        "summary": "Stage explicit restore in maintenance",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirm": {
+                    "const": "RESTORE GAME"
+                  },
+                  "state": {
+                    "$ref": "#/components/schemas/RestoreState"
+                  }
+                },
+                "required": [
+                  "confirm",
+                  "state"
+                ],
+                "additionalProperties": true
+              },
+              "example": {
+                "confirm": "RESTORE GAME",
+                "state": {
+                  "completed_players": [
+                    "001",
+                    "002",
+                    "003"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/firmware/retry": {
+      "post": {
+        "operationId": "post_firmware_retry",
+        "summary": "Force firmware upload in maintenance",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirm": {
+                    "const": "FLASH MEGA"
+                  }
+                },
+                "required": [
+                  "confirm"
+                ],
+                "additionalProperties": true
+              },
+              "example": {
+                "confirm": "FLASH MEGA"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/host/actions": {
+      "post": {
+        "operationId": "post_host_actions",
+        "summary": "Queue host action in maintenance",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostAction"
+              },
+              "example": {
+                "action": "update"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/serial": {
+      "post": {
+        "operationId": "post_serial",
+        "summary": "Queue Arduino command or game/host relay",
+        "responses": {
+          "202": {
+            "description": "Accepted, not executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SerialAccepted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Operation"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found/session changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Operation queue full",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable; saturation may return no JSON body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON object \u22644096 bytes; Content-Length required.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SerialRequest"
+              },
+              "example": {
+                "command": "RFID STATUS"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": true
+      },
+      "Operation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "RUNNING",
+              "DONE",
+              "ERROR"
+            ]
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "finished_at": {
+            "type": "number"
+          },
+          "result": {},
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "status",
+          "created_at"
+        ],
+        "additionalProperties": true
+      },
+      "Receipt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "SENT",
+              "OK",
+              "ERROR",
+              "TIMEOUT",
+              "CANCELLED"
+            ]
+          },
+          "queued_at": {
+            "type": "number"
+          },
+          "finished_at": {
+            "type": "number"
+          },
+          "response": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "command",
+          "origin",
+          "status",
+          "queued_at",
+          "response"
+        ],
+        "additionalProperties": true
+      },
+      "SerialAccepted": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/Receipt"
+          }
+        },
+        "required": [
+          "status",
+          "command",
+          "receipt"
+        ],
+        "additionalProperties": true
+      },
+      "HostJob": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "RUNNING",
+              "DONE",
+              "ERROR",
+              "INTERRUPTED"
+            ]
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "finished_at": {
+            "type": "number"
+          },
+          "result": {},
+          "storage_error": {
+            "type": "string"
+          },
+          "execution_service": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "status",
+          "created_at"
+        ],
+        "additionalProperties": true
+      },
+      "ExecutionResult": {
+        "type": "object",
+        "properties": {
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "stdout": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "stdout_truncated": {
+            "type": "boolean"
+          },
+          "stderr_truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "maintenance",
+              "fault"
+            ]
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "phase": {
+            "type": "string",
+            "description": "Lifecycle phase; may evolve."
+          },
+          "maintenance": {
+            "type": "boolean"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "degraded": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fault": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "ready",
+          "phase",
+          "maintenance",
+          "reasons",
+          "degraded",
+          "fault"
+        ],
+        "additionalProperties": true
+      },
+      "SolveState": {
+        "type": "object",
+        "properties": {
+          "fully_solved": {
+            "type": "boolean"
+          },
+          "completed_count": {
+            "type": "integer"
+          },
+          "total_players": {
+            "type": "integer"
+          },
+          "players": {
+            "type": "object",
+            "additionalProperties": {
+              "enum": [
+                "SOLVED",
+                "ACTIVE",
+                "PENDING"
+              ]
+            }
+          },
+          "current_steps_completed": {
+            "type": "integer"
+          },
+          "current_steps_total": {
+            "type": "integer"
+          },
+          "next_expected_mole": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ticket_requested": {
+            "type": "boolean"
+          },
+          "physical_payout_confirmed": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "GameState": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "active_player": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hit_progress": {
+            "type": "integer"
+          },
+          "bug_colors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "queen": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "whack_order": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "solution_order": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "ticket_dispensed": {
+            "type": "boolean",
+            "description": "Legacy name: payout requested."
+          },
+          "ticket_status": {
+            "type": "string"
+          },
+          "tickets_dispensed": {
+            "type": "integer"
+          },
+          "solve_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SolveState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "controller": {
+            "$ref": "#/components/schemas/Health"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Application": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "source_sha256": {
+            "type": "string"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "built_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "packages": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "Audio": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "device": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queue_depth": {
+            "type": "integer"
+          },
+          "last_cue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "playing": {
+            "type": "boolean"
+          },
+          "worker_alive": {
+            "type": "boolean"
+          },
+          "available_cues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "Configuration": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "Desired application settings returned as strings."
+      },
+      "Diagnostics": {
+        "type": "object",
+        "properties": {
+          "application": {
+            "$ref": "#/components/schemas/Application"
+          },
+          "controller": {
+            "$ref": "#/components/schemas/Health"
+          },
+          "observed_at": {
+            "type": "string"
+          },
+          "runtime": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "host": {},
+          "firmware": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "serial": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "storage": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "audio": {
+            "$ref": "#/components/schemas/Audio"
+          },
+          "game": {
+            "$ref": "#/components/schemas/GameState"
+          },
+          "recent_errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": true
+            }
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/Configuration"
+          },
+          "active_configuration": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "firmware_history": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "fault_history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": true
+            }
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Operation"
+            }
+          },
+          "operation_queue_depth": {
+            "type": "integer"
+          },
+          "control_worker_alive": {
+            "type": "boolean"
+          },
+          "pending_admin_restore": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Host": {
+        "type": "object",
+        "properties": {
+          "os": {},
+          "uptime": {},
+          "load_average": {},
+          "memory": {},
+          "cpu_counters": {},
+          "network_counters": {},
+          "audio_cards": {},
+          "pressure": {},
+          "cpu": {},
+          "storage": {},
+          "block_devices": {},
+          "network": {},
+          "routes": {},
+          "usb": {},
+          "pci": {},
+          "temperatures": {},
+          "disk_counters": {},
+          "hardware_monitors": {},
+          "processes": {},
+          "services": {},
+          "containers": {},
+          "images": {},
+          "docker_version": {},
+          "game_container": {},
+          "upgradable_packages_from_local_cache": {},
+          "observed_at": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "kernel": {
+            "type": "string"
+          },
+          "architecture": {
+            "type": "string"
+          },
+          "machine_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "boot_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agent": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "reboot_required": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      },
+      "Logs": {
+        "type": "object",
+        "properties": {
+          "system": {
+            "$ref": "#/components/schemas/ExecutionResult"
+          },
+          "journal": {
+            "$ref": "#/components/schemas/ExecutionResult"
+          },
+          "container": {
+            "$ref": "#/components/schemas/ExecutionResult"
+          },
+          "kernel": {
+            "$ref": "#/components/schemas/ExecutionResult"
+          },
+          "installation": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ExecutionResult"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/GameState"
+          }
+        },
+        "required": [
+          "timestamp",
+          "session_id",
+          "event",
+          "state"
+        ],
+        "additionalProperties": true
+      },
+      "RestoreState": {
+        "type": "object",
+        "properties": {
+          "completed_players": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "001",
+                "002",
+                "003",
+                "004",
+                "005",
+                "006"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "active_player": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "001",
+                  "002",
+                  "003",
+                  "004",
+                  "005",
+                  "006"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hit_progress": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "ticket_requested": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true,
+        "anyOf": [
+          {
+            "required": [
+              "completed_players"
+            ]
+          },
+          {
+            "required": [
+              "active_player"
+            ]
+          }
+        ],
+        "description": "Cross-field rules in API_REFERENCE.md: active cannot be completed; ticket_requested requires all completed; progress 4 normalizes completion."
+      },
+      "ApplicationSettings": {
+        "type": "object",
+        "properties": {
+          "AUDIO_ENABLED": {
+            "enum": [
+              0,
+              1,
+              "0",
+              "1"
+            ]
+          },
+          "LOG_RAW_ACCEL": {
+            "enum": [
+              0,
+              1,
+              "0",
+              "1"
+            ]
+          },
+          "LOG_HEARTBEAT": {
+            "enum": [
+              0,
+              1,
+              "0",
+              "1"
+            ]
+          },
+          "LOG_RAINBOW_COMMANDS": {
+            "enum": [
+              0,
+              1,
+              "0",
+              "1"
+            ]
+          },
+          "FIRMWARE_AUTO_FLASH": {
+            "enum": [
+              0,
+              1,
+              "0",
+              "1"
+            ]
+          },
+          "FAILURE_SECONDS": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 120
+          },
+          "VICTORY_SECONDS": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 120
+          },
+          "IDLE_FRAME_SECONDS": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 60
+          },
+          "AUDIO_DEVICE": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "additionalProperties": false
+      },
+      "HostSettings": {
+        "type": "object",
+        "properties": {
+          "IMAGE": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "SERIAL_DEVICE": {
+            "type": "string"
+          },
+          "STATUS_BIND": {
+            "type": "string",
+            "description": "IPv4 or IPv6 literal"
+          },
+          "STATUS_PORT": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "HostAction": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "enum": [
+              "update",
+              "restart_game",
+              "update_installation",
+              "os_update",
+              "hostname",
+              "configuration",
+              "reboot",
+              "poweroff"
+            ]
+          },
+          "confirm": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/HostSettings"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": true,
+        "description": "os_update requires confirm UPDATE OS; hostname requires hostname; configuration requires settings. All require maintenance. Validation may be asynchronous."
+      },
+      "SerialRequest": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "arduino",
+              "game",
+              "host"
+            ],
+            "default": "arduino"
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[ -~]+$"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "additionalProperties": true,
+        "description": "Arduino single ASCII line, or game/host relay with supporting fields. Arduino target gives SerialAccepted; relays give Operation."
+      }
+    }
+  }
+}

@@ -1,0 +1,888 @@
+{
+  "observed_at": "2026-10-10T00:12:34.732004+00:00",
+  "application": {
+    "version": "3.2.13",
+    "source_sha256": "669e994a26a55546e34ad64c51c1bb01259a9375b0025782ff0217922c707636",
+    "packages": {
+      "avrdude": "7.1+dfsg-3+b2",
+      "alsa-utils": "1.2.14-1"
+    },
+    "revision": "working-tree",
+    "built_at": "2026-10-10T00:03:21.191181+00:00",
+    "source": "Docker image"
+  },
+  "runtime": {
+    "python": "3.12.15",
+    "pyserial": "3.5",
+    "container_hostname": "b86138239e09",
+    "architecture": "x86_64",
+    "kernel": "6.14.0-37-generic",
+    "os": {
+      "NAME": "Debian GNU/Linux",
+      "ID": "debian",
+      "PRETTY_NAME": "Debian GNU/Linux 13 (trixie)",
+      "VERSION_ID": "13",
+      "VERSION": "13 (trixie)",
+      "VERSION_CODENAME": "trixie",
+      "DEBIAN_VERSION_FULL": "13.7",
+      "HOME_URL": "https://www.debian.org/",
+      "SUPPORT_URL": "https://www.debian.org/support",
+      "BUG_REPORT_URL": "https://bugs.debian.org/"
+    },
+    "process_id": 1,
+    "uptime_seconds": 410.5
+  },
+  "host": {
+    "collected_at": "2026-10-10T00:05:43.102805+00:00",
+    "hostname": "mole4",
+    "machine_id": "deb2bf59592f478aa2f0f44018160adf",
+    "boot_id": "746d2503-661f-4ee2-ac0f-bcce6d80047d",
+    "os": {
+      "NAME": "Linux Mint",
+      "ID": "linuxmint",
+      "PRETTY_NAME": "Linux Mint 22.3",
+      "VERSION": "22.3 (Zena)",
+      "ID_LIKE": "ubuntu debian",
+      "VERSION_ID": "22.3",
+      "HOME_URL": "https://www.linuxmint.com/",
+      "SUPPORT_URL": "https://forums.linuxmint.com/",
+      "BUG_REPORT_URL": "http://linuxmint-troubleshooting-guide.readthedocs.io/en/latest/",
+      "PRIVACY_POLICY_URL": "https://www.linuxmint.com/",
+      "VERSION_CODENAME": "zena",
+      "UBUNTU_CODENAME": "noble"
+    },
+    "kernel": "6.14.0-37-generic",
+    "architecture": "x86_64",
+    "host_python": "3.12.3",
+    "docker_cli": "Docker version 29.9.0, build f415da8",
+    "docker_engine": "29.9.0",
+    "packages": {
+      "openssh-server": "1:9.6p1-3ubuntu13.19",
+      "avahi-daemon": "0.8-13ubuntu6.2",
+      "systemd": "255.4-1ubuntu8.17",
+      "docker-ce": "5:29.9.0-1~ubuntu.24.04~noble"
+    },
+    "cpu_count": 4,
+    "memory_at_launch": "MemTotal:        8017820 kB\nMemFree:         6394996 kB\nMemAvailable:    6940176 kB\nBuffers:           47160 kB\nCached:           753832 kB\nSwapCached:            0 kB\nActive:          1147024 kB\nInactive:         148048 kB\nActive(anon):     548540 kB\nInactive(anon):        0 kB\nActive(file):     598484 kB\nInactive(file):   148048 kB\nUnevictable:       51528 kB\nMlocked:              64 kB\nSwapTotal:       2097148 kB\nSwapFree:        2097148 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:             12292 kB\nWriteback:             0 kB\nAnonPages:        545616 kB\nMapped:           332016 kB\nShmem:             54472 kB\nKReclaimable:      34660 kB\nSlab:             134832 kB\nSReclaimable:      34660 kB\nSUnreclaim:       100172 kB\nKernelStack:        9052 kB\nPageTables:        17164 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6106056 kB\nCommitted_AS:    3841628 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:       40036 kB\nVmallocChunk:          0 kB\nPercpu:             2416 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:         0 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nUnaccepted:            0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:      211368 kB\nDirectMap2M:     4917248 kB\nDirectMap1G:     4194304 kB",
+    "uptime_at_launch": "18.25 41.38",
+    "image_id": "sha256:cabbb1eaf98bf0a45562fc9c811ad443e2529af5e3743015627a87c2ae56d751",
+    "configured_image": "myst1cus/mole-game:latest",
+    "services_at_launch": {
+      "docker": "active",
+      "ssh": "active",
+      "avahi-daemon": "active"
+    },
+    "network": [
+      {
+        "interface": "enp0s31f6",
+        "addresses": []
+      },
+      {
+        "interface": "wlp3s0",
+        "addresses": [
+          "192.168.8.206",
+          "fe80::df:8779:a328:7f4b"
+        ]
+      }
+    ]
+  },
+  "firmware": {
+    "running_identity": "FIRMWARE MOLE_FINAL_NO_INTERVAL_v2 3.0.3 f7c88c2e90fdb881da28a93e51fb5ca86f68ecfff99fdf507e659d5083936fa7",
+    "expected": {
+      "name": "MOLE_FINAL_NO_INTERVAL_v2",
+      "version": "3.0.3",
+      "sha256": "f7c88c2e90fdb881da28a93e51fb5ca86f68ecfff99fdf507e659d5083936fa7",
+      "board": "arduino:avr:mega",
+      "toolchain": {
+        "arduino_cli": "1.2.2",
+        "avr_core": "1.8.6",
+        "Adafruit BusIO": "1.17.4",
+        "Adafruit NeoPixel": "1.12.3",
+        "Adafruit MCP23017 Arduino Library": "2.3.2",
+        "MFRC522": "1.4.12"
+      }
+    }
+  },
+  "serial": {
+    "connected": true,
+    "session_id": "ca1b45765ff64baaaadf46bd7fdf3d21",
+    "protocol": 2,
+    "reset_cause": 0,
+    "output_pin_and_led_buffer_state": {
+      "moles": {
+        "0": {
+          "output_pin": 0,
+          "ring_color": 0
+        },
+        "1": {
+          "output_pin": 0,
+          "ring_color": 0
+        },
+        "2": {
+          "output_pin": 0,
+          "ring_color": 0
+        },
+        "3": {
+          "output_pin": 0,
+          "ring_color": 0
+        },
+        "4": {
+          "output_pin": 0,
+          "ring_color": 0
+        }
+      },
+      "players": {
+        "0": {
+          "color": 0
+        },
+        "1": {
+          "color": 0
+        },
+        "2": {
+          "color": 0
+        },
+        "3": {
+          "color": 0
+        },
+        "4": {
+          "color": 0
+        },
+        "5": {
+          "color": 0
+        }
+      },
+      "tickets": {
+        "active": 0,
+        "target": 0,
+        "count": 0,
+        "motor": 0
+      }
+    },
+    "hardware_health": {
+      "mcp_ready": true,
+      "sensor_mask": 31,
+      "rfid_ready": true,
+      "lease_enabled": true
+    },
+    "health_command_status": "OK",
+    "health_age_seconds": 2.91,
+    "event_failure": null,
+    "port": "/dev/cabinet-arduino",
+    "baud": 115200,
+    "failure_reason": null,
+    "last_received_age_seconds": 0.95,
+    "lines_received": 5132,
+    "last_ack": "OK KEEPALIVE",
+    "i2c_timeout_count": 2,
+    "rfid_status_at_last_report": "READY",
+    "sensors": {
+      "0": {
+        "startup_status": "OK",
+        "last_values": {
+          "x": 67,
+          "y": 39,
+          "z": -2204,
+          "source": "health_poll"
+        },
+        "last_sample_age_seconds": 2.95
+      },
+      "1": {
+        "startup_status": "OK",
+        "last_values": {
+          "x": 41,
+          "y": 69,
+          "z": -1935,
+          "source": "health_poll"
+        },
+        "last_sample_age_seconds": 2.95
+      },
+      "2": {
+        "startup_status": "OK",
+        "last_values": {
+          "x": 146,
+          "y": -135,
+          "z": -1873,
+          "source": "health_poll"
+        },
+        "last_sample_age_seconds": 2.94
+      },
+      "3": {
+        "startup_status": "OK",
+        "last_values": {
+          "x": 27,
+          "y": -18,
+          "z": -2135,
+          "source": "health_poll"
+        },
+        "last_sample_age_seconds": 2.94
+      },
+      "4": {
+        "startup_status": "OK",
+        "last_values": {
+          "x": 115,
+          "y": 54,
+          "z": -1826,
+          "source": "health_poll"
+        },
+        "last_sample_age_seconds": 2.93
+      }
+    },
+    "command_queue_depth": 0,
+    "pending_commands": 0,
+    "event_queue_depth": 0,
+    "reader_alive": true,
+    "writer_alive": true,
+    "event_worker_alive": true,
+    "recent_errors": [
+      {
+        "timestamp": 1791591115.6378274,
+        "message": "I2C_TIMEOUT"
+      },
+      {
+        "timestamp": 1791591140.045351,
+        "message": "I2C_TIMEOUT"
+      }
+    ],
+    "recent_serial_lines": [
+      {
+        "timestamp": 1791591145.768099,
+        "line": "HARDWARE TICKETS ACTIVE 0 TARGET 0 COUNT 0 MOTOR 0"
+      },
+      {
+        "timestamp": 1791591145.7718747,
+        "line": "HEALTH MCP 1 SENSORS 31 RFID 1 LEASE 1"
+      },
+      {
+        "timestamp": 1791591145.7722056,
+        "line": "OK HEALTH"
+      },
+      {
+        "timestamp": 1791591145.7725453,
+        "line": "ACK 1277 OK"
+      },
+      {
+        "timestamp": 1791591146.6859367,
+        "line": "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -2234 MAX_Z -2192"
+      },
+      {
+        "timestamp": 1791591146.6934993,
+        "line": "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1948 MAX_Z -1917"
+      },
+      {
+        "timestamp": 1791591146.698641,
+        "line": "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1910 MAX_Z -1868"
+      },
+      {
+        "timestamp": 1791591146.7063823,
+        "line": "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2142 MAX_Z -2107"
+      },
+      {
+        "timestamp": 1791591146.7140574,
+        "line": "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1866 MAX_Z -1811"
+      },
+      {
+        "timestamp": 1791591146.718151,
+        "line": "OK KEEPALIVE"
+      },
+      {
+        "timestamp": 1791591146.7185135,
+        "line": "ACK 1278 OK"
+      },
+      {
+        "timestamp": 1791591147.6897633,
+        "line": "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2220 MAX_Z -1"
+      },
+      {
+        "timestamp": 1791591147.6975775,
+        "line": "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1954 MAX_Z -1912"
+      },
+      {
+        "timestamp": 1791591147.7054696,
+        "line": "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1908 MAX_Z -1863"
+      },
+      {
+        "timestamp": 1791591147.710367,
+        "line": "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -2145 MAX_Z -2108"
+      },
+      {
+        "timestamp": 1791591147.7181091,
+        "line": "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1853 MAX_Z -1820"
+      },
+      {
+        "timestamp": 1791591147.7216163,
+        "line": "OK KEEPALIVE"
+      },
+      {
+        "timestamp": 1791591147.7220159,
+        "line": "ACK 1279 OK"
+      },
+      {
+        "timestamp": 1791591148.7134864,
+        "line": "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2221 MAX_Z -2190"
+      },
+      {
+        "timestamp": 1791591148.7213092,
+        "line": "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1960 MAX_Z -1909"
+      },
+      {
+        "timestamp": 1791591148.7261806,
+        "line": "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 37 FAILURES 0 MIN_Z -1917 MAX_Z -1866"
+      },
+      {
+        "timestamp": 1791591148.734056,
+        "line": "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2142 MAX_Z -2108"
+      },
+      {
+        "timestamp": 1791591148.7418659,
+        "line": "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1856 MAX_Z -1817"
+      },
+      {
+        "timestamp": 1791591148.7423007,
+        "line": "OK KEEPALIVE"
+      },
+      {
+        "timestamp": 1791591148.7426462,
+        "line": "ACK 1280 OK"
+      },
+      {
+        "timestamp": 1791591148.754065,
+        "line": "SAMPLE 0 64 57 -2214"
+      },
+      {
+        "timestamp": 1791591148.7585146,
+        "line": "HARDWARE MOLE 0 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591148.762079,
+        "line": "SAMPLE 1 31 71 -1942"
+      },
+      {
+        "timestamp": 1791591148.7629368,
+        "line": "HARDWARE MOLE 1 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591148.7663736,
+        "line": "SAMPLE 2 139 -142 -1909"
+      },
+      {
+        "timestamp": 1791591148.7672346,
+        "line": "HARDWARE MOLE 2 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591148.7706556,
+        "line": "SAMPLE 3 15 -39 -2122"
+      },
+      {
+        "timestamp": 1791591148.7744336,
+        "line": "HARDWARE MOLE 3 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591148.7750738,
+        "line": "SAMPLE 4 120 46 -1825"
+      },
+      {
+        "timestamp": 1791591148.7785993,
+        "line": "HARDWARE MOLE 4 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591148.7793343,
+        "line": "HARDWARE PLAYER 0 COLOR 0"
+      },
+      {
+        "timestamp": 1791591148.7829688,
+        "line": "HARDWARE PLAYER 1 COLOR 0"
+      },
+      {
+        "timestamp": 1791591148.7836647,
+        "line": "HARDWARE PLAYER 2 COLOR 0"
+      },
+      {
+        "timestamp": 1791591148.7871838,
+        "line": "HARDWARE PLAYER 3 COLOR 0"
+      },
+      {
+        "timestamp": 1791591148.7907636,
+        "line": "HARDWARE PLAYER 4 COLOR 0"
+      },
+      {
+        "timestamp": 1791591148.791496,
+        "line": "HARDWARE PLAYER 5 COLOR 0"
+      },
+      {
+        "timestamp": 1791591148.7956276,
+        "line": "HARDWARE TICKETS ACTIVE 0 TARGET 0 COUNT 0 MOTOR 0"
+      },
+      {
+        "timestamp": 1791591148.7995124,
+        "line": "HEALTH MCP 1 SENSORS 31 RFID 1 LEASE 1"
+      },
+      {
+        "timestamp": 1791591148.799866,
+        "line": "OK HEALTH"
+      },
+      {
+        "timestamp": 1791591148.8026693,
+        "line": "ACK 1281 OK"
+      },
+      {
+        "timestamp": 1791591149.716526,
+        "line": "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2229 MAX_Z -2186"
+      },
+      {
+        "timestamp": 1791591149.721619,
+        "line": "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1948 MAX_Z -1913"
+      },
+      {
+        "timestamp": 1791591149.7292864,
+        "line": "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1914 MAX_Z -1862"
+      },
+      {
+        "timestamp": 1791591149.7372506,
+        "line": "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2139 MAX_Z -2099"
+      },
+      {
+        "timestamp": 1791591149.742106,
+        "line": "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1864 MAX_Z -1814"
+      },
+      {
+        "timestamp": 1791591149.7452126,
+        "line": "OK KEEPALIVE"
+      },
+      {
+        "timestamp": 1791591149.7455714,
+        "line": "ACK 1282 OK"
+      },
+      {
+        "timestamp": 1791591150.720302,
+        "line": "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -2224 MAX_Z -2190"
+      },
+      {
+        "timestamp": 1791591150.727905,
+        "line": "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1956 MAX_Z -1911"
+      },
+      {
+        "timestamp": 1791591150.7330391,
+        "line": "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1900 MAX_Z -1864"
+      },
+      {
+        "timestamp": 1791591150.7409317,
+        "line": "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -2148 MAX_Z -2106"
+      },
+      {
+        "timestamp": 1791591150.7486384,
+        "line": "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1852 MAX_Z -1815"
+      },
+      {
+        "timestamp": 1791591150.7491302,
+        "line": "OK KEEPALIVE"
+      },
+      {
+        "timestamp": 1791591150.749477,
+        "line": "ACK 1283 OK"
+      },
+      {
+        "timestamp": 1791591151.7406652,
+        "line": "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2225 MAX_Z -2185"
+      },
+      {
+        "timestamp": 1791591151.7484393,
+        "line": "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1947 MAX_Z -1910"
+      },
+      {
+        "timestamp": 1791591151.7562928,
+        "line": "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1911 MAX_Z -1869"
+      },
+      {
+        "timestamp": 1791591151.7612073,
+        "line": "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2154 MAX_Z -2050"
+      },
+      {
+        "timestamp": 1791591151.7689657,
+        "line": "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1851 MAX_Z -1809"
+      },
+      {
+        "timestamp": 1791591151.7694044,
+        "line": "OK KEEPALIVE"
+      },
+      {
+        "timestamp": 1791591151.7697434,
+        "line": "ACK 1284 OK"
+      },
+      {
+        "timestamp": 1791591151.7812514,
+        "line": "SAMPLE 0 67 39 -2204"
+      },
+      {
+        "timestamp": 1791591151.7853415,
+        "line": "HARDWARE MOLE 0 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591151.7859366,
+        "line": "SAMPLE 1 41 69 -1935"
+      },
+      {
+        "timestamp": 1791591151.789618,
+        "line": "HARDWARE MOLE 1 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591151.79318,
+        "line": "SAMPLE 2 146 -135 -1873"
+      },
+      {
+        "timestamp": 1791591151.794057,
+        "line": "HARDWARE MOLE 2 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591151.797465,
+        "line": "SAMPLE 3 27 -18 -2135"
+      },
+      {
+        "timestamp": 1791591151.7983272,
+        "line": "HARDWARE MOLE 3 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591151.801752,
+        "line": "SAMPLE 4 115 54 -1826"
+      },
+      {
+        "timestamp": 1791591151.805478,
+        "line": "HARDWARE MOLE 4 OUTPUT 0 RING 0"
+      },
+      {
+        "timestamp": 1791591151.806207,
+        "line": "HARDWARE PLAYER 0 COLOR 0"
+      },
+      {
+        "timestamp": 1791591151.809689,
+        "line": "HARDWARE PLAYER 1 COLOR 0"
+      },
+      {
+        "timestamp": 1791591151.8104186,
+        "line": "HARDWARE PLAYER 2 COLOR 0"
+      },
+      {
+        "timestamp": 1791591151.813979,
+        "line": "HARDWARE PLAYER 3 COLOR 0"
+      },
+      {
+        "timestamp": 1791591151.8146732,
+        "line": "HARDWARE PLAYER 4 COLOR 0"
+      },
+      {
+        "timestamp": 1791591151.8182256,
+        "line": "HARDWARE PLAYER 5 COLOR 0"
+      },
+      {
+        "timestamp": 1791591151.8223963,
+        "line": "HARDWARE TICKETS ACTIVE 0 TARGET 0 COUNT 0 MOTOR 0"
+      },
+      {
+        "timestamp": 1791591151.8262355,
+        "line": "HEALTH MCP 1 SENSORS 31 RFID 1 LEASE 1"
+      },
+      {
+        "timestamp": 1791591151.8265698,
+        "line": "OK HEALTH"
+      },
+      {
+        "timestamp": 1791591151.8269224,
+        "line": "ACK 1285 OK"
+      },
+      {
+        "timestamp": 1791591152.7434473,
+        "line": "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2225 MAX_Z -2182"
+      },
+      {
+        "timestamp": 1791591152.7482078,
+        "line": "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1940 MAX_Z -1916"
+      },
+      {
+        "timestamp": 1791591152.7560065,
+        "line": "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1909 MAX_Z -1867"
+      },
+      {
+        "timestamp": 1791591152.7640655,
+        "line": "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2143 MAX_Z -2106"
+      },
+      {
+        "timestamp": 1791591152.7693963,
+        "line": "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1853 MAX_Z -1805"
+      },
+      {
+        "timestamp": 1791591152.7719843,
+        "line": "OK KEEPALIVE"
+      },
+      {
+        "timestamp": 1791591152.7723467,
+        "line": "ACK 1286 OK"
+      },
+      {
+        "timestamp": 1791591153.746838,
+        "line": "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -2228 MAX_Z -2198"
+      },
+      {
+        "timestamp": 1791591153.7549236,
+        "line": "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1945 MAX_Z -1913"
+      },
+      {
+        "timestamp": 1791591153.7629657,
+        "line": "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1899 MAX_Z -1862"
+      },
+      {
+        "timestamp": 1791591153.7675164,
+        "line": "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -2143 MAX_Z -2110"
+      },
+      {
+        "timestamp": 1791591153.7754061,
+        "line": "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1849 MAX_Z -1805"
+      },
+      {
+        "timestamp": 1791591153.7755308,
+        "line": "OK KEEPALIVE"
+      },
+      {
+        "timestamp": 1791591153.7790415,
+        "line": "ACK 1287 OK"
+      }
+    ]
+  },
+  "storage": {
+    "game_log_path": "/data/game-events.jsonl",
+    "game_log_exists": true,
+    "free_bytes": 106485633024,
+    "total_bytes": 124896559104,
+    "log_error": null
+  },
+  "audio": {
+    "enabled": true,
+    "device": "plughw:CARD=AUDIO,DEV=0",
+    "requested_device": "default",
+    "usb_cards": [
+      {
+        "id": "AUDIO",
+        "usb_id": null,
+        "device": 0,
+        "discovery": "ALSA"
+      }
+    ],
+    "mixer": {
+      "card": "AUDIO",
+      "target_percent": 100,
+      "controls": [
+        {
+          "name": "PCM",
+          "index": 0,
+          "readback": "Simple mixer control 'PCM',0\n  Capabilities: pvolume pswitch pswitch-joined\n  Playback channels: Front Left - Front Right\n  Limits: Playback 0 - 338\n  Mono:\n  Front Left: Playback 338 [100%] [-0.06dB] [on]\n  Front Right: Playback 338 [100%] [-0.06dB] [on]\n"
+        }
+      ],
+      "status": "APPLIED"
+    },
+    "volume_percent": 100.0,
+    "last_clipped_samples": 0,
+    "queue_depth": 0,
+    "last_cue": null,
+    "last_error": null,
+    "playing": false,
+    "worker_alive": true,
+    "last_files": [],
+    "categories": {
+      "hit": [
+        "000-ow-rain-1-falling.wav",
+        "001-ow-rain-2-rising.wav",
+        "002-ow-rain-3-deep-drop.wav",
+        "003-ow-rain-4-flicker.wav"
+      ],
+      "laugh": [
+        "000-laughter-digital-rain-dense.wav",
+        "001-laughter-digital-rain.wav"
+      ],
+      "cheer": [
+        "000-applause-2-digital-rain-fine.wav"
+      ],
+      "victory": [
+        "000-victory.wav"
+      ]
+    },
+    "available_cues": [
+      "cheer",
+      "encouraging_whistle",
+      "failure",
+      "game_start",
+      "kiss",
+      "laugh_1",
+      "laugh_2",
+      "laugh_3",
+      "mole_hit",
+      "ouch_1",
+      "ouch_2",
+      "ouch_3",
+      "victory",
+      "whistle"
+    ]
+  },
+  "configuration": {
+    "FAILURE_SECONDS": "15",
+    "VICTORY_SECONDS": "30",
+    "IDLE_FRAME_SECONDS": "2",
+    "AUDIO_ENABLED": "1",
+    "AUDIO_DEVICE": "default",
+    "LOG_RAW_ACCEL": "0",
+    "LOG_HEARTBEAT": "0",
+    "LOG_RAINBOW_COMMANDS": "0",
+    "FIRMWARE_AUTO_FLASH": "1",
+    "AUDIO_VOLUME_PERCENT": "100"
+  },
+  "game": {
+    "solve_state": {
+      "fully_solved": false,
+      "completed_count": 0,
+      "total_players": 6,
+      "players": {
+        "001": "PENDING",
+        "002": "PENDING",
+        "003": "PENDING",
+        "004": "PENDING",
+        "005": "PENDING",
+        "006": "PENDING"
+      },
+      "current_steps_completed": 0,
+      "current_steps_total": 0,
+      "next_expected_mole": null,
+      "ticket_requested": false,
+      "physical_payout_confirmed": false
+    },
+    "active_player": null,
+    "completed_players": [],
+    "bug_colors": {},
+    "queen": null,
+    "whack_order": [],
+    "solution_order": [],
+    "hit_progress": 0,
+    "locked": true,
+    "status": "WAITING FOR BADGE",
+    "ticket_dispensed": false,
+    "ticket_status": "NOT REQUESTED",
+    "tickets_dispensed": 0
+  },
+  "controller": {
+    "status": "maintenance",
+    "ready": false,
+    "phase": "MAINTENANCE",
+    "maintenance": true,
+    "reasons": [],
+    "degraded": [],
+    "fault": null
+  },
+  "recent_errors": [],
+  "active_configuration": {
+    "failure_seconds": 15.0,
+    "victory_seconds": 30.0,
+    "idle_frame_seconds": 2.0
+  },
+  "firmware_history": {
+    "FIRMWARE MOLE_FINAL_NO_INTERVAL_v2 3.0.0 a8228b12540e37591c8a62d8c936e5f653482d1a64634f5be48e0a756b1d26e0": {
+      "attempts": 0,
+      "last_attempt": 1791528709.7578108,
+      "status": "VERIFIED",
+      "finished_at": 1791528720.1299577
+    },
+    "FIRMWARE MOLE_FINAL_NO_INTERVAL_v2 3.0.1 ac11da05f2fc50a8fc4686cb6aadb93b2a7de892ed4a149451862a1e7a9d1e8a": {
+      "attempts": 0,
+      "last_attempt": 1791531817.6607995,
+      "status": "VERIFIED",
+      "finished_at": 1791531828.1184168
+    },
+    "FIRMWARE MOLE_FINAL_NO_INTERVAL_v2 3.0.2 f9060e62342de0ff66f1736f8338892a8a14bc98778c54605a74068dc3d1e7bf": {
+      "attempts": 0,
+      "last_attempt": 1791585802.6866827,
+      "status": "VERIFIED",
+      "finished_at": 1791585813.1383197
+    },
+    "FIRMWARE MOLE_FINAL_NO_INTERVAL_v2 3.0.3 f7c88c2e90fdb881da28a93e51fb5ca86f68ecfff99fdf507e659d5083936fa7": {
+      "attempts": 0,
+      "last_attempt": 1791590746.435307,
+      "status": "VERIFIED",
+      "finished_at": 1791590756.9839056
+    }
+  },
+  "operations": [
+    {
+      "id": "2da6bae8d6b5441ca38ba3197c019586",
+      "action": "recover",
+      "status": "DONE",
+      "created_at": 1791590744.7094617,
+      "result": {
+        "connected": true,
+        "firmware": "FIRMWARE MOLE_FINAL_NO_INTERVAL_v2 3.0.3 f7c88c2e90fdb881da28a93e51fb5ca86f68ecfff99fdf507e659d5083936fa7"
+      },
+      "finished_at": 1791590757.3335125
+    },
+    {
+      "id": "ae7b3b775884496299ce581f6a9cc504",
+      "action": "maintenance",
+      "status": "DONE",
+      "created_at": 1791591005.69161,
+      "result": {
+        "maintenance": true
+      },
+      "finished_at": 1791591005.713834
+    }
+  ],
+  "operation_queue_depth": 0,
+  "control_worker_alive": true,
+  "pending_admin_restore": false,
+  "fault_history": [
+    {
+      "message": "Arduino did not report READY during startup; inspect boot output and reset/power-cycle the logic hardware",
+      "timestamp": 1791524947.7696602
+    },
+    {
+      "message": "Arduino did not report READY during startup; inspect boot output and reset/power-cycle the logic hardware",
+      "timestamp": 1791525447.8727725
+    },
+    {
+      "message": "Arduino did not report READY during startup; inspect boot output and reset/power-cycle the logic hardware",
+      "timestamp": 1791525596.4245822
+    },
+    {
+      "message": "Arduino did not report READY during startup; inspect boot output and reset/power-cycle the logic hardware",
+      "timestamp": 1791525701.4725754
+    },
+    {
+      "message": "Required hardware not ready: {'mcp_ready': False, 'sensor_mask': 0, 'rfid_ready': False, 'lease_enabled': False}",
+      "timestamp": 1791527548.5077116
+    },
+    {
+      "message": "Required hardware not ready: {'mcp_ready': False, 'sensor_mask': 0, 'rfid_ready': False, 'lease_enabled': False}",
+      "timestamp": 1791527612.1838923
+    },
+    {
+      "message": "CONTROLLER_LEASE_INACTIVE",
+      "timestamp": 1791528206.42046
+    },
+    {
+      "message": "Required hardware not ready: {'mcp_ready': False, 'sensor_mask': 31, 'rfid_ready': True, 'lease_enabled': False}",
+      "timestamp": 1791583773.4873443
+    },
+    {
+      "message": "Required hardware not ready: {'mcp_ready': False, 'sensor_mask': 31, 'rfid_ready': True, 'lease_enabled': False}",
+      "timestamp": 1791583776.1768763
+    },
+    {
+      "message": "Required hardware not ready: {'mcp_ready': False, 'sensor_mask': 31, 'rfid_ready': True, 'lease_enabled': False}",
+      "timestamp": 1791584090.6341982
+    },
+    {
+      "message": "REQUIRED_HARDWARE_UNAVAILABLE",
+      "timestamp": 1791585982.4240837
+    },
+    {
+      "message": "REQUIRED_HARDWARE_UNAVAILABLE",
+      "timestamp": 1791587748.8645926
+    },
+    {
+      "message": "REQUIRED_HARDWARE_UNAVAILABLE",
+      "timestamp": 1791589179.1327157
+    }
+  ]
+}

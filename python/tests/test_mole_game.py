@@ -84,6 +84,7 @@ class AccelGameTests(unittest.TestCase):
 
     @patch("app.mole_game.time.sleep")
     def test_queen_strike_restarts_and_requires_release(self, sleep):
+        self.game.failure_seconds = 0
         mole = MOLE_ID_BY_NAME[self.game.state.queen]
         self.sample(mole)
         self.assertEqual(self.game.state.hit_progress, 0)
@@ -109,6 +110,7 @@ class AccelGameTests(unittest.TestCase):
 
     @patch("app.mole_game.time.sleep")
     def test_cooldown_even_after_release(self, sleep):
+        self.game.failure_seconds = 0
         mole = MOLE_ID_BY_NAME[self.game.state.queen]
         now = self.game._accept_samples_after + 1
         self.sample(mole, timestamp=now)

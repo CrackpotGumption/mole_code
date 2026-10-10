@@ -90,7 +90,7 @@ class AudioFailureTests(unittest.TestCase):
         self.assertTrue(self.game.state.locked)
         self.assertNotIn('SENSORS ENABLE', self.hardware.commands)
 
-    def test_failure_strike_retracts_then_reaction_then_new_mole(self):
+    def test_failure_dances_without_sensors_or_strike_reactions(self):
         clock = Clock()
         self.game.failure_seconds = 1.0
         self.game.state.active_player = '001'
@@ -105,12 +105,12 @@ class AudioFailureTests(unittest.TestCase):
             timing.append((clock.now, command))
             original_send(command)
             if command == 'MOLE 0 UP':
-                captured.extend([('ACCEL 0 0 0 0 -12000', clock.now + 0.01),
-                                 ('ACCEL 0 0 0 0 -14000', clock.now + 0.02)])
+                captured.extend([('ACCEL 0 0 0 0 -12000', clock.now + 0.76),
+                                 ('ACCEL 0 0 0 0 -14000', clock.now + 0.77)])
 
         def samples():
-            result = list(captured)
-            captured.clear()
+            result = [item for item in captured if item[1] <= clock.now]
+            captured[:] = [item for item in captured if item[1] > clock.now]
             return result
 
         self.hardware.send = send
@@ -119,16 +119,17 @@ class AudioFailureTests(unittest.TestCase):
         self.hardware.end_sensor_capture = Mock()
         with patch('app.mole_game.time.monotonic', side_effect=lambda: clock.now),                 patch('app.mole_game.time.sleep', side_effect=clock.sleep),                 patch('app.mole_game.random.sample', return_value=[0]),                 patch('app.mole_game.random.choice', side_effect=lambda items: items[0]):
             self.game.run_failure_show()
-        self.audio.play_failure_hit.assert_called_once()
+        self.audio.play_failure_hit.assert_not_called()
         self.hardware.begin_sensor_capture.assert_called_once()
         self.hardware.end_sensor_capture.assert_called_once()
-        down_time = next(t for t, command in timing if command == 'MOLE 0 DOWN')
-        new_time = next(t for t, command in timing if command == 'MOLE 1 UP')
-        self.assertGreaterEqual(new_time - down_time, 0.2 - 0.0001)
+        self.assertNotIn('MOLE 1 UP', self.hardware.commands)
+        self.assertIn('MOLE 0 UP', self.hardware.commands)
+        self.assertIn('LIGHT 0 255 0 0', self.hardware.commands)
         self.assertEqual(self.game.state.hit_progress, 2)
         self.assertEqual(self.game.state.completed_players, {'002'})
         self.assertAlmostEqual(clock.now, 101)
-        self.assertIn('SENSORS ENABLE', self.hardware.commands)
+        self.assertNotIn('SENSORS ENABLE', self.hardware.commands)
+        self.assertIn('SENSORS DISABLE', self.hardware.commands)
         self.assertEqual(self.hardware.commands[-3:],
                          ['SENSORS DISABLE', 'MOLES ALL DOWN', 'LIGHTS OFF'])
 
@@ -182,3 +183,37 @@ class AudioFailureTests(unittest.TestCase):
         samples = failure_mix(directory, 2, random.Random(1))
         self.assertEqual(len(samples), 2 * SAMPLE_RATE * 2)
         self.assertNotEqual(samples, bytes(len(samples)))
+
+    def test_failure_ignores_pneumatic_shock_and_accepts_settled_strike(self):
+        raised, raised_at, latched, last_hit, pending = {0}, {0: 100}, set(), {}, {}
+        self.audio.play_failure_hit.return_value = 0.2
+        for line in ('HIT 0 0 20000', 'ACCEL 0 0 0 0 -20000'):
+            self.game._failure_strike(line, 100.04, raised, raised_at, latched, last_hit, pending, 115)
+        self.assertEqual(raised, {0})
+        self.assertEqual(self.hardware.commands, [])
+        # Movement elsewhere on the playfield also masks transmitted vibration.
+        self.game._failure_strike('HIT 0 0 20000', 101, raised, raised_at, latched, last_hit, pending, 115, motion_until=101.2)
+        self.assertEqual(raised, {0})
+        self.game._failure_strike('HIT 0 0 20000', 101.3, raised, raised_at, latched, last_hit, pending, 115)
+        self.assertEqual(raised, set())
+        self.assertIn('MOLE 0 DOWN', self.hardware.commands)
+        self.audio.play_failure_hit.assert_called_once()
+
+    def test_hardware_pause_preserves_show_and_extends_its_remaining_time(self):
+        clock = Clock()
+        def sleeping(seconds):
+            clock.sleep(seconds)
+            if 100.2 <= clock.now < 100.7:
+                self.game._hardware_paused = True
+            elif clock.now >= 100.7:
+                self.game._hardware_paused = False
+        self.game.state.active_player = '002'
+        self.game.state.hit_progress = 2
+        self.game.state.completed_players = {'001'}
+        with patch('app.mole_game.time.monotonic', side_effect=lambda: clock.now), patch('app.mole_game.time.sleep', side_effect=sleeping):
+            self.game._run_show(1)
+        self.assertGreaterEqual(clock.now, 101.45)
+        self.assertEqual(self.game.state.active_player, '002')
+        self.assertEqual(self.game.state.hit_progress, 2)
+        self.assertEqual(self.game.state.completed_players, {'001'})
+        self.audio.play_failure.assert_called_once_with(1)

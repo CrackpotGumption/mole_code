@@ -312,6 +312,7 @@ class MoleGame:
     HIT_Z_THRESHOLD = -9000
     HIT_RELEASE_Z = -6400
     HIT_COOLDOWN = 0.300
+    FAILURE_SETTLE_SECONDS = 0.100
     SENSOR_CHANNELS = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4}
 
     def __init__(
@@ -345,6 +346,11 @@ class MoleGame:
         self._accept_samples_after = float("inf")
         self._hit_latched = set()
         self._last_hit = {}
+        self._hardware_paused = False
+        self._show_active = False
+        self._show_victory = False
+        self._show_raised = set()
+        self._show_settle_until = 0
         self._next_idle_frame = 0.0
         self.persistence_error = None
         log_path = state_log_path or (Path(state_path).with_name('game-events.jsonl') if state_path else None)
@@ -1231,7 +1237,7 @@ class MoleGame:
         self.start_new_round()
 
 
-    def _failure_strike(self, line, received_at, raised, raised_at, latched, last_hit, pending, deadline, victory=False):
+    def _failure_strike(self, line, received_at, raised, raised_at, latched, last_hit, pending, deadline, victory=False, motion_until=0):
         parts = line.split()
         try:
             if len(parts) == 6 and parts[0] == "ACCEL":
@@ -1252,7 +1258,8 @@ class MoleGame:
         except ValueError:
             return
         if (mole not in raised or self.SENSOR_CHANNELS.get(mole) != channel
-                or received_at < raised_at[mole]
+                or received_at < raised_at[mole] + (0 if victory else self.FAILURE_SETTLE_SECONDS)
+                or (not victory and received_at < motion_until)
                 or (z is not None and mole in latched)
                 or received_at - last_hit.get(mole, float("-inf")) < self.HIT_COOLDOWN):
             return
@@ -1293,6 +1300,8 @@ class MoleGame:
             if on_start is not None:
                 on_start()
             return
+        self.arduino.send("SENSORS DISABLE")
+        self.arduino.wait_until_idle()
         if victory:
             self.audio.play_victory(seconds)
         else:
@@ -1302,26 +1311,38 @@ class MoleGame:
         motion_interval = 0.5 if victory else 1.0
         next_rainbow = next_motion
         raised, raised_at, latched, last_hit = set(), {}, set(), {}
+        self._show_raised = raised
+        self._show_active = True
+        self._show_victory = victory
         pending = {}
+        motion_until = 0.0
         self.arduino.begin_sensor_capture()
         try:
-            self.arduino.send("SENSORS ENABLE")
-            self.arduino.wait_until_idle()
             if on_start is not None:
                 on_start()
-            # Poll strikes at 50 Hz; random motion/light changes remain at 2 Hz.
-            for _ in range(math.ceil(seconds / 0.02) + 1):
+            # Process ticket reports; shows do not poll accelerometers for strikes.
+            while True:
                 now = time.monotonic()
+                if self._hardware_paused and not self._stopping:
+                    time.sleep(0.02)
+                    elapsed = time.monotonic() - now
+                    deadline += elapsed
+                    next_motion += elapsed
+                    for replacement in pending:
+                        pending[replacement] += elapsed
+                    self.arduino.read_captured_samples()  # Discard fault-period vibration.
+                    continue
+                motion_until = max(motion_until, self._show_settle_until)
                 if now >= deadline or self.stop_requested():
                     break
                 for line, received_at in self.arduino.read_captured_samples():
                     if line.startswith("TICKET_"):
                         self._handle_ticket_event(line)
-                    else:
-                        self._failure_strike(line, received_at, raised, raised_at, latched,
-                                             last_hit, pending, deadline, victory=victory)
+                    # Strike samples are ignored in both celebration modes.
+                moved = False
                 ready = [mole for mole, ready_at in pending.items() if now >= ready_at]
                 for mole in ready:
+                    moved = True
                     pending.pop(mole)
                     raised.add(mole)
                     raised_at[mole] = time.monotonic()
@@ -1332,6 +1353,7 @@ class MoleGame:
                     next_motion = now + motion_interval
                 if now >= next_motion and not pending:
                     selected = set(random.sample(range(5), random.randint(1, 3 if victory else 2)))
+                    moved = moved or selected != raised
                     for mole in sorted(raised - selected):
                         self.arduino.send(f"MOLE {mole} DOWN")
                         if not victory:
@@ -1340,6 +1362,7 @@ class MoleGame:
                         raised_at[mole] = time.monotonic()
                         self.arduino.send(f"MOLE {mole} UP")
                     raised = selected
+                    self._show_raised = raised
                     if not victory:
                         for mole in sorted(raised):
                             self.arduino.send(f"LIGHT {mole} 255 0 0")
@@ -1355,8 +1378,12 @@ class MoleGame:
                         self.arduino.send(f"PLAYER_LIGHT {player} {r} {g} {b}", quiet=True)
                     next_rainbow = now + 0.5
                 self.arduino.wait_until_idle()
+                if moved and not victory:
+                    motion_until = time.monotonic() + self.FAILURE_SETTLE_SECONDS
                 time.sleep(max(0, min(0.02, deadline - time.monotonic())))
         finally:
+            self._show_active = False
+            self._show_raised = set()
             self.arduino.send("SENSORS DISABLE")
             self.arduino.send("MOLES ALL DOWN")
             self.arduino.send("LIGHTS OFF")

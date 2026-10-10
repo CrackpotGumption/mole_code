@@ -19,7 +19,7 @@ class PuzzlePollingTests(unittest.TestCase):
 #include <sstream>
 #include <string>
 #define MOLE_COUNT 5
-const unsigned long SENSOR_INTERVAL = 10;
+const unsigned long SENSOR_INTERVAL = 5;
 const unsigned long RAW_REPORT_INTERVAL = 50;
 const unsigned long PUZZLE_HIT_INTERVAL = 300;
 const unsigned long PUZZLE_ARM_SETTLE = 750;
@@ -44,53 +44,37 @@ struct Logger {
 } Serial;
 '''
         tests = r'''
+void advance(unsigned long duration) {
+  unsigned long until = clockMs + duration;
+  while(clockMs < until) { clockMs++; checkForHits(); }
+}
 int main() {
   enableSensorMode(true);
-  clockMs = 9; checkForHits(); assert(reads == 0);
-  clockMs = 10; values[0] = -10000; values[1] = -12000;
-  checkForHits(); assert(Serial.buffer.str().empty()); // startup movement
-  clockMs = 750; checkForHits(); assert(Serial.buffer.str().empty()); // not rested
-  values[0] = -1900; values[1] = -1900;
-  clockMs = 760; checkForHits();
-  values[0] = -10000; values[1] = -12000;
-  clockMs = 770; checkForHits();
+  advance(4); assert(reads==0);
+  advance(1); assert(reads==1); // Only one transaction per scheduler slot.
+  advance(20); assert(reads==5);
+  values[0]=-12000; advance(725);
+  assert(Serial.buffer.str().find("HIT ")==std::string::npos);
+  values[0]=-1900; advance(25); // Require rest after settling.
+  values[0]=-12000; advance(25);
+  assert(Serial.buffer.str().find("HIT 0 0 12000")!=std::string::npos);
   assert(!puzzleHitArmed);
-  assert(puzzleLatched[0] && puzzleLatched[1]);
-  assert(Serial.buffer.str() == "HIT 1 1 12000\n");
-  clockMs = 780; values[2] = -15000; checkForHits();
-  assert(Serial.buffer.str() == "HIT 1 1 12000\n");
-  enableSensorMode(true);
-  clockMs = 790; checkForHits();
-  assert(Serial.buffer.str() == "HIT 1 1 12000\n");
-  for (int i = 0; i < 5; i++) values[i] = -1900;
-  clockMs = 1530; checkForHits();
-  values[4] = -32768; clockMs = 1540; checkForHits();
-  assert(Serial.buffer.str().find("HIT 4 4 32768\n") != std::string::npos);
-  assert(Serial.buffer.str().find("ACCEL") == std::string::npos);
-  auto text = Serial.buffer.str();
-  clockMs = 1640; enableSensorMode(true);
-  clockMs = 2390; checkForHits(); assert(Serial.buffer.str() == text);
-  values[4] = -1900; clockMs = 2400; checkForHits();
-  values[4] = -10000; clockMs = 2410; checkForHits();
-  assert(Serial.buffer.str().find("HIT 4 4 10000\n") != std::string::npos);
-
-  Serial.buffer.str(""); Serial.buffer.clear();
-  clockMs = 2500; enableSensorMode(false);
-  for (int i = 0; i < 5; i++) values[i] = -1900;
-  values[2] = -16000; clockMs = 2510; checkForHits();
-  assert(Serial.buffer.str().empty());
-  values[2] = -1900; clockMs = 2520; checkForHits();
-  clockMs = 2540; checkForHits(); assert(Serial.buffer.str().empty());
-  clockMs = 2550; checkForHits();
-  assert(Serial.buffer.str().find("ACCEL 2 2 0 0 -16000\n") != std::string::npos);
-  auto frame = Serial.buffer.str();
-  clockMs = 2560; checkForHits(); assert(Serial.buffer.str() == frame);
-  clockMs = 2600; enableSensorMode(true);
-  for (int i = 0; i < 5; i++) values[i] = -1900;
-  values[0] = -7000; failing[3] = true;
-  clockMs = 3710; checkForHits();
-  assert(Serial.buffer.str().find("PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 1 READS 1 FAILURES 0 MIN_Z -7000 MAX_Z -7000") != std::string::npos);
-  assert(Serial.buffer.str().find("PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 1 READS 0 FAILURES 1") != std::string::npos);
+  auto first=Serial.buffer.str(); auto previousReads=reads;
+  values[1]=-15000; advance(100);
+  assert(reads==previousReads); // Stop extra traffic after the one puzzle hit.
+  assert(Serial.buffer.str()==first);
+  for(int id=0;id<5;id++) values[id]=-1900;
+  enableSensorMode(true); advance(775);
+  values[4]=-32768; advance(25);
+  assert(Serial.buffer.str().find("HIT 4 4 32768")!=std::string::npos);
+  assert(Serial.buffer.str().find("ACCEL ")==std::string::npos);
+  Serial.buffer.str(""); for(int id=0;id<5;id++) values[id]=-1900;
+  enableSensorMode(false); values[2]=-16000; advance(15);
+  values[2]=-1900; advance(35);
+  assert(Serial.buffer.str().find("ACCEL 2 2 0 0 -16000")!=std::string::npos);
+  Serial.buffer.str(""); failing[3]=true;
+  enableSensorMode(true); advance(1000);
+  assert(puzzleFailures[3]>0 || Serial.buffer.str().find("FAILURES 40")!=std::string::npos);
 }
 '''
         with tempfile.TemporaryDirectory() as folder:

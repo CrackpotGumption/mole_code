@@ -1,0 +1,6 @@
+[
+  {"name":"Cabinet 1","url":"http://mole1.local:8080"},
+  {"name":"Cabinet 2","url":"http://mole2.local:8080"},
+  {"name":"Cabinet 3","url":"http://mole3.local:8080"},
+  {"name":"Cabinet 4","url":"http://mole4.local:8080"}
+]

@@ -1,0 +1,208 @@
+[
+  {
+    "test": "baseline",
+    "seconds": 60.0,
+    "start": {
+      "timeouts": 0,
+      "hardware": {
+        "mcp_ready": true,
+        "sensor_mask": 31,
+        "rfid_ready": true,
+        "lease_enabled": true
+      },
+      "connected": true,
+      "session": "ca1b45765ff64baaaadf46bd7fdf3d21",
+      "health_age": 0.78,
+      "fault": null,
+      "outputs": {
+        "0": 0,
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0
+      },
+      "puzzle_diag": []
+    },
+    "end": {
+      "timeouts": 0,
+      "hardware": {
+        "mcp_ready": true,
+        "sensor_mask": 31,
+        "rfid_ready": true,
+        "lease_enabled": true
+      },
+      "connected": true,
+      "session": "ca1b45765ff64baaaadf46bd7fdf3d21",
+      "health_age": 0.56,
+      "fault": null,
+      "outputs": {
+        "0": 0,
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0
+      },
+      "puzzle_diag": []
+    },
+    "added_timeouts": 0
+  },
+  {
+    "test": "solenoids",
+    "seconds": 60.0,
+    "start": {
+      "timeouts": 0,
+      "hardware": {
+        "mcp_ready": true,
+        "sensor_mask": 31,
+        "rfid_ready": true,
+        "lease_enabled": true
+      },
+      "connected": true,
+      "session": "ca1b45765ff64baaaadf46bd7fdf3d21",
+      "health_age": 1.89,
+      "fault": null,
+      "outputs": {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1
+      },
+      "puzzle_diag": []
+    },
+    "end": {
+      "timeouts": 1,
+      "hardware": {
+        "mcp_ready": true,
+        "sensor_mask": 31,
+        "rfid_ready": true,
+        "lease_enabled": true
+      },
+      "connected": true,
+      "session": "ca1b45765ff64baaaadf46bd7fdf3d21",
+      "health_age": 1.67,
+      "fault": null,
+      "outputs": {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1
+      },
+      "puzzle_diag": []
+    },
+    "added_timeouts": 1
+  },
+  {
+    "test": "sensors",
+    "seconds": 60.0,
+    "start": {
+      "timeouts": 1,
+      "hardware": {
+        "mcp_ready": true,
+        "sensor_mask": 31,
+        "rfid_ready": true,
+        "lease_enabled": true
+      },
+      "connected": true,
+      "session": "ca1b45765ff64baaaadf46bd7fdf3d21",
+      "health_age": 1.0,
+      "fault": null,
+      "outputs": {
+        "0": 0,
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0
+      },
+      "puzzle_diag": []
+    },
+    "end": {
+      "timeouts": 2,
+      "hardware": {
+        "mcp_ready": true,
+        "sensor_mask": 31,
+        "rfid_ready": true,
+        "lease_enabled": true
+      },
+      "connected": true,
+      "session": "ca1b45765ff64baaaadf46bd7fdf3d21",
+      "health_age": 0.75,
+      "fault": null,
+      "outputs": {
+        "0": 0,
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0
+      },
+      "puzzle_diag": [
+        "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2243 MAX_Z -2189",
+        "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1949 MAX_Z -1913",
+        "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1915 MAX_Z -1867",
+        "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2145 MAX_Z -2107",
+        "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1869 MAX_Z -1815"
+      ]
+    },
+    "added_timeouts": 1
+  },
+  {
+    "test": "combined",
+    "seconds": 60.0,
+    "start": {
+      "timeouts": 2,
+      "hardware": {
+        "mcp_ready": true,
+        "sensor_mask": 31,
+        "rfid_ready": true,
+        "lease_enabled": true
+      },
+      "connected": true,
+      "session": "ca1b45765ff64baaaadf46bd7fdf3d21",
+      "health_age": 2.19,
+      "fault": null,
+      "outputs": {
+        "0": 0,
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0
+      },
+      "puzzle_diag": [
+        "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2243 MAX_Z -2189",
+        "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1949 MAX_Z -1913",
+        "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1915 MAX_Z -1867",
+        "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -2145 MAX_Z -2107",
+        "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 36 FAILURES 0 MIN_Z -1869 MAX_Z -1815"
+      ]
+    },
+    "end": {
+      "timeouts": 26,
+      "hardware": {
+        "mcp_ready": true,
+        "sensor_mask": 31,
+        "rfid_ready": true,
+        "lease_enabled": true
+      },
+      "connected": true,
+      "session": "ca1b45765ff64baaaadf46bd7fdf3d21",
+      "health_age": 1.99,
+      "fault": null,
+      "outputs": {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1
+      },
+      "puzzle_diag": [
+        "PUZZLE_DIAG MOLE 0 ARMED 1 LATCHED 0 READS 33 FAILURES 1 MIN_Z -2237 MAX_Z -2177",
+        "PUZZLE_DIAG MOLE 1 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1956 MAX_Z -1912",
+        "PUZZLE_DIAG MOLE 2 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -1916 MAX_Z -1864",
+        "PUZZLE_DIAG MOLE 3 ARMED 1 LATCHED 0 READS 35 FAILURES 0 MIN_Z -2142 MAX_Z -2111",
+        "PUZZLE_DIAG MOLE 4 ARMED 1 LATCHED 0 READS 34 FAILURES 0 MIN_Z -1857 MAX_Z -1813"
+      ]
+    },
+    "added_timeouts": 24
+  }
+]

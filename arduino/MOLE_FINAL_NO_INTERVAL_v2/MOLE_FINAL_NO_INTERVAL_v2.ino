@@ -53,9 +53,15 @@ const unsigned long CONTROLLER_LEASE_MS = 5000;
 
 #define MPU_ADDRESS 0x68
 
+// Reserved accelerometer INT inputs, in standard mole order.
+// Mega A8..A12 are digital 62..66 / PK0..PK4 / PCINT16..PCINT20.
+// Pin-change ISR/configuration is not enabled yet; polling remains active.
+const uint8_t accelerometerInterruptPin[MOLE_COUNT] = {A8, A9, A10, A11, A12};
 
 
-const unsigned long SENSOR_INTERVAL = 10;
+
+
+const unsigned long SENSOR_INTERVAL = 5;
 const unsigned long RFID_POLL_INTERVAL = 250;
 unsigned long lastRFIDPoll = 0;
 bool rfidReaderAvailable = false;
@@ -991,16 +997,20 @@ bool configureAccelerometerRange(
 
 // SENSOR MODES
 // ============================================================
-// SENSORS PUZZLE: 10 ms polling, one downward HIT, then disarm.
-// SENSORS ENABLE: 10 ms polling, peak-preserving ACCEL reports every 50 ms.
+// SENSORS PUZZLE: staggered 25 ms per-sensor polling, one downward HIT, then disarm.
+// SENSORS ENABLE: staggered 25 ms per-sensor polling, peak-preserving ACCEL reports every 50 ms.
 // Both modes use the same physical sensor mapping. Python owns game rules.
 // SENSORS DISABLE: stop polling/reporting.
 // HIT <mole> <mux_channel> <positive downward strength>
 // ACCEL <mole> <mux_channel> <x> <y> <z>
 
 // PUZZLE: poll frequently, emit one HIT, wait for explicit Python re-arm.
-// RAW: keep polling at 10 ms, report the most negative sample in each 50 ms
+// RAW: poll one sensor every 5 ms, report the most negative sample in each 50 ms
 // window so reducing serial traffic does not discard brief downward strikes.
+uint8_t nextSensorToPoll = 0;
+bool sensorSampleValid[MOLE_COUNT] = {};
+unsigned long sensorSampleAt[MOLE_COUNT] = {};
+int16_t sensorSampleX[MOLE_COUNT], sensorSampleY[MOLE_COUNT], sensorSampleZ[MOLE_COUNT];
 bool puzzleSensorMode = false;
 bool puzzleHitArmed = false;
 bool puzzleLatched[MOLE_COUNT] = {false, false, false, false, false};
@@ -1044,6 +1054,7 @@ void enableSensorMode(bool puzzle) {
     for (int mole = 0; mole < MOLE_COUNT; mole++) puzzleLatched[mole] = true;
   }
   hitDetectionEnabled = true;
+  nextSensorToPoll = 0;
   lastRawReport = millis();
   lastPuzzleDiagnostic = lastRawReport;
   for (int mole = 0; mole < MOLE_COUNT; mole++) {
@@ -1060,17 +1071,24 @@ void checkForHits() {
   unsigned long now = millis();
   if (now - lastSensorPoll < SENSOR_INTERVAL) return;
   lastSensorPoll = now;
+  if (puzzleSensorMode && !puzzleHitArmed) return;
   int selected = -1;
   bool strikeThisPoll[MOLE_COUNT] = {false, false, false, false, false};
   int16_t strongestZ = 0;
   bool settled = !puzzleSensorMode || now - puzzleArmStart >= PUZZLE_ARM_SETTLE;
   bool intervalReady = settled && (!puzzleHasHit || now - lastPuzzleHit >= PUZZLE_HIT_INTERVAL);
-  for (int mole = 0; mole < MOLE_COUNT; mole++) {
+  int mole = nextSensorToPoll;
+  nextSensorToPoll = (nextSensorToPoll + 1) % MOLE_COUNT;
+  {
     int16_t x, y, z;
     if (!readAccelerometer(sensorChannel[mole], x, y, z)) {
       if (puzzleSensorMode) puzzleFailures[mole]++;
-      continue;
+      sensorSampleValid[mole] = false;
+      return;
     }
+    sensorSampleValid[mole] = true;
+    sensorSampleAt[mole] = now;
+    sensorSampleX[mole] = x; sensorSampleY[mole] = y; sensorSampleZ[mole] = z;
     if (puzzleSensorMode) {
       puzzleReads[mole]++;
       if (z < puzzleMinZ[mole]) puzzleMinZ[mole] = z;
@@ -3085,6 +3103,15 @@ void handleCommand(
     turnAllMoleLightsOff(); clearPlayerLights();
     Serial.println("OK SAFE STOP"); return;
   }
+  if (command == "HEALTH RECOVER") {
+    // Probe on a quiet bus. Python restarts a fresh game only after verification.
+    hitDetectionEnabled = false; puzzleHitArmed = false;
+    Wire.end(); Wire.begin(); Wire.setWireTimeout(I2C_TIMEOUT_US, true);
+    Wire.beginTransmission(TCA_ADDRESS); Wire.write((uint8_t)0); Wire.endTransmission();
+    mcpInitialized = false; sensorConfiguredMask = 0;
+    for (uint8_t id = 0; id < MOLE_COUNT; id++) sensorSampleValid[id] = false;
+    command = "HEALTH";
+  }
   if (command == "HEALTH") {
     if (!mcpInitialized) {
       mcpInitialized = mcp.begin_I2C();
@@ -3100,12 +3127,20 @@ void handleCommand(
     uint8_t mask = 0;
     for (uint8_t id = 0; id < MOLE_COUNT; id++) {
       int16_t x, y, z;
-      if (!(sensorConfiguredMask & (1 << id)) && wakeSensor(sensorChannel[id]) && configureAccelerometerRange(sensorChannel[id])) sensorConfiguredMask |= (1 << id);
-      if ((sensorConfiguredMask & (1 << id)) && readAccelerometer(sensorChannel[id], x, y, z)) {
+      bool activelyPolling = hitDetectionEnabled && (!puzzleSensorMode || puzzleHitArmed);
+      bool sampleOK;
+      if (activelyPolling && sensorSampleValid[id] && millis() - sensorSampleAt[id] <= 250) {
+        sampleOK = true;
+        x = sensorSampleX[id]; y = sensorSampleY[id]; z = sensorSampleZ[id];
+      } else {
+        if (!(sensorConfiguredMask & (1 << id)) && wakeSensor(sensorChannel[id]) && configureAccelerometerRange(sensorChannel[id])) sensorConfiguredMask |= (1 << id);
+        sampleOK = (sensorConfiguredMask & (1 << id)) && readAccelerometer(sensorChannel[id], x, y, z);
+      }
+      if (sampleOK) {
         mask |= (1 << id);
         Serial.print("SAMPLE "); Serial.print(id); Serial.print(' '); Serial.print(x);
         Serial.print(' '); Serial.print(y); Serial.print(' '); Serial.println(z);
-      } else { sensorConfiguredMask &= ~(1 << id); }
+      } else if (!activelyPolling) { sensorConfiguredMask &= ~(1 << id); }
       Serial.print("HARDWARE MOLE "); Serial.print(id); Serial.print(" OUTPUT ");
       Serial.print(mcpReady ? mcp.digitalRead(solenoidOutput[id]) : -1);
       Serial.print(" RING "); Serial.println(lights[id]->getPixelColor(0));

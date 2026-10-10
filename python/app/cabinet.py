@@ -1,5 +1,6 @@
 """Cabinet lifecycle and API operations; HTTP remains available during faults."""
 from collections import deque
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,7 @@ from app.audio_cues import AudioCues
 from app.control_state import read, write
 from app.diagnostics import application_info, diagnostics, read_json
 from app.firmware import connect_verified, history_path
-from app.mole_game import MoleGame, GameState, PLAYER_IDS
+from app.mole_game import MoleGame, GameState, PLAYER_IDS, PLAYER_INDEX, MOLE_ID_BY_NAME, RGB
 
 
 class Cabinet:
@@ -32,6 +33,14 @@ class Cabinet:
         self.worker = None
         self.last_keepalive = self.last_probe = 0
         self.last_attempt = 0
+        self.health_failures = 0
+        self.health_retry_at = 0
+        self._health_probe = None
+        self._last_probe_report = None
+        self._repair_queued = False
+        self._next_fault_flash = 0
+        self._fault_red = False
+        self.hardware_recovery = None
         self.state_directory = Path(os.environ.get('GAME_LOG_PATH', '/data/game-events.jsonl')).parent
         self.pending_admin_state = None
         try:
@@ -71,7 +80,7 @@ class Cabinet:
             self.submit('recover', {})
 
     def submit(self, action, payload):
-        supported = ('recover', 'maintenance', 'resume', 'badge', 'reset_game', 'restore_state', 'configure', 'firmware_retry',
+        supported = ('repair_hardware', 'recover', 'maintenance', 'resume', 'badge', 'reset_game', 'restore_state', 'configure', 'firmware_retry',
                      'host_update', 'host_restart_game', 'host_reboot', 'host_poweroff', 'host_hostname', 'host_configuration', 'host_os_update', 'host_update_installation', 'audio')
         if action == 'recover' and self.phase == 'READY' and not self.maintenance:
             raise ValueError('Enter maintenance mode before reconnecting a running game')
@@ -116,10 +125,11 @@ class Cabinet:
             self.recent_errors.append({'timestamp': time.time(), 'message': message})
         print(f'CABINET ERROR: {message}')
 
-    def _halt(self):
+    def _halt(self, preserve_game=False):
         if self.game:
             self.game.log_state('CONTROLLER_STOPPING')
-            self.game._stopping = True
+            if not preserve_game:
+                self.game._stopping = True
         if self.arduino:
             self.arduino.event_handler = None
             self.arduino._command_failure = None
@@ -135,14 +145,20 @@ class Cabinet:
     def latch_fault(self, message):
         if self.fault is not None:
             return
-        self.fault = {'message': message, 'timestamp': time.time()}
+        self.fault = {'message': message, 'timestamp': time.time(), 'hardware_report': self._last_probe_report}
         self.phase = 'FAULT'
         try:
             history = read(self.state_directory / 'fault-history.json', [])
             write(self.state_directory / 'fault-history.json', (history + [self.fault])[-50:])
         except Exception as error:
             self.record_error(f'Fault history could not be saved: {error}')
-        self._halt()
+        preserve_game = '5 consecutive health failures' in message
+        if preserve_game and self.game:
+            self.game._hardware_paused = True
+        self._halt(preserve_game=preserve_game)
+        if self.game:
+            self.game.log_state('FAULT_ENTERED')
+        self._next_fault_flash = 0
         self.record_error(message)
 
     def _connect(self, force_flash=False, admin_state=None):
@@ -157,11 +173,17 @@ class Cabinet:
                         on_status=lambda phase, info: setattr(self, 'phase', phase), force_flash=force_flash)
         if self.arduino.protocol_version < 2:
             raise RuntimeError('Firmware does not support correlated command receipts')
-        probe = self.arduino.submit_command('HEALTH', origin='health', quiet=True)
-        self.arduino.wait_until_idle()
-        report = self.arduino.get_diagnostics()['hardware_health']
-        if not report or not report['mcp_ready'] or report['sensor_mask'] != 31:
-            raise RuntimeError(f'Required hardware not ready: {report}')
+        for attempt in range(5):
+            self.arduino.submit_command('HEALTH' if attempt == 0 else 'HEALTH RECOVER', origin='health', quiet=True)
+            self.arduino.wait_until_idle()
+            report = self.arduino.get_diagnostics()['hardware_health']
+            if report and report['mcp_ready'] and report['sensor_mask'] == 31:
+                break
+            if attempt == 4:
+                self._last_probe_report = report
+                raise RuntimeError(f'Required hardware not ready after 5 checks: {report}')
+            if self.stopped.wait(3):
+                raise RuntimeError('Controller stopped during health retries')
         self.arduino.submit_command('LEASE ON', origin='health', quiet=True)
         self.arduino.wait_until_idle()
         # LEASE ON's ACK does not update the cached HEALTH report. Refresh it
@@ -172,6 +194,10 @@ class Cabinet:
         if not report or not report['mcp_ready'] or report['sensor_mask'] != 31 or not report['lease_enabled']:
             raise RuntimeError(f'Hardware or controller lease not ready: {report}')
         self.fault = None
+        self.health_failures = 0
+        self._health_probe = None
+        self.health_retry_at = time.monotonic() + 10
+        self._repair_queued = False
         self._new_game(admin_state=admin_state)
         self.phase = 'MAINTENANCE' if self.maintenance else 'READY'
         return {'connected': True, 'firmware': self.arduino.firmware_identity}
@@ -193,8 +219,75 @@ class Cabinet:
                 self.game.apply_admin_state(admin_state)
             self.arduino.event_handler = self.game.handle_arduino_event
 
+    def _resume_game_hardware(self):
+        # Preserve the live game and serial connection. This is not a restart.
+        if self.game:
+            showing = getattr(self.game, '_show_active', False)
+            with (nullcontext() if showing else self.game._event_lock):
+                self.arduino.submit_command('LIGHTS OFF', origin='game')
+                self.arduino.submit_command('PLAYER_LIGHTS OFF', origin='game')
+                state = self.game.state
+                for player in state.completed_players:
+                    self.arduino.submit_command(f'PLAYER_LIGHT {PLAYER_INDEX[player]} GREEN', origin='game')
+                if showing:
+                    for identity in self.game._show_raised:
+                        self.arduino.submit_command(f'MOLE {identity} UP', origin='game')
+                        self.arduino.submit_command(f'LIGHT {identity} 255 0 0', origin='game')
+                    self.arduino.submit_command('SENSORS DISABLE', origin='game')
+                    self.game._show_settle_until = time.monotonic() + self.game.FAILURE_SETTLE_SECONDS
+                elif state.active_player:
+                    self.arduino.submit_command(f'PLAYER_LIGHT {PLAYER_INDEX[state.active_player]} YELLOW', origin='game')
+                    struck = set(state.whack_order[:state.hit_progress])
+                    for mole, color in state.bug_colors.items():
+                        if mole in struck:
+                            continue
+                        identity = MOLE_ID_BY_NAME[mole]
+                        r, g, b = RGB[color]
+                        self.arduino.submit_command(f'MOLE {identity} UP', origin='game')
+                        self.arduino.submit_command(f'LIGHT {identity} {r} {g} {b}', origin='game')
+                    self.game._resume_hit_detection()
+                self.arduino.wait_until_idle()
+                self.game._stopping = False
+                self.arduino.event_handler = self.game.handle_arduino_event
+                self.game.log_state('HARDWARE_RECOVERED_GAME_PRESERVED')
+        self.fault = None
+        self.health_failures = 0
+        self._health_probe = None
+        self.health_retry_at = time.monotonic() + 10
+        self.phase = 'MAINTENANCE' if self.maintenance else 'READY'
+        if self.game:
+            self.game._hardware_paused = False
+
     def _act(self, action, payload):
+        if action == 'repair_hardware':
+            self.phase = 'RECOVERING'
+            self.hardware_recovery = {'status': 'RUNNING', 'attempts': 0}
+            try:
+                for attempt in range(1, 4):
+                    self.hardware_recovery['attempts'] = attempt
+                    self.arduino.submit_command('SENSORS DISABLE', origin='health', quiet=True)
+                    self.arduino.submit_command('HEALTH RECOVER', origin='health', quiet=True)
+                    self.arduino.wait_until_idle()
+                    report = self.arduino.get_diagnostics()
+                    self.hardware_recovery['hardware_report'] = report.get('hardware_health')
+                    if self._hardware_healthy(report):
+                        self._resume_game_hardware()
+                        self.hardware_recovery['status'] = 'RECOVERED'
+                        return {'recovered': True, 'game_preserved': True}
+                    if attempt < 3 and self.stopped.wait(3):
+                        break
+                self.hardware_recovery['status'] = 'FAILED'
+                raise RuntimeError('Hardware recovery failed; inspect connections and power')
+            except Exception as error:
+                self.hardware_recovery.update(status='FAILED', error=str(error))
+                raise
+            finally:
+                self._repair_queued = False
+                if self.fault:
+                    self.phase = 'FAULT'
         if action == 'recover':
+            if self.fault and self.game and self.arduino and self.arduino.running and not self.maintenance:
+                return self._act('repair_hardware', payload)
             return self._connect()
         if action == 'maintenance':
             self.maintenance = True
@@ -287,22 +380,69 @@ class Cabinet:
             if hardware and not hardware['rfid_ready']:
                 degraded.append('RFID_NOT_READY')
             if not hardware or not hardware['mcp_ready'] or hardware['sensor_mask'] != 31:
-                reasons.append('REQUIRED_HARDWARE_UNAVAILABLE')
+                (reasons if self.health_failures >= 5 or self.phase != 'READY' else degraded).append('REQUIRED_HARDWARE_UNAVAILABLE')
             if hardware and not hardware['lease_enabled']:
-                reasons.append('CONTROLLER_LEASE_INACTIVE')
+                (reasons if self.health_failures >= 5 or self.phase != 'READY' else degraded).append('CONTROLLER_LEASE_INACTIVE')
             if report.get('health_command_status') not in (None, 'OK'):
-                reasons.append('HARDWARE_HEALTH_COMMAND_FAILED')
-            if report['health_age_seconds'] is None or report['health_age_seconds'] > 10:
-                reasons.append('HARDWARE_HEALTH_STALE')
+                (reasons if self.health_failures >= 5 or self.phase != 'READY' else degraded).append('HARDWARE_HEALTH_COMMAND_FAILED')
+            if report['health_age_seconds'] is None or report['health_age_seconds'] > 20:
+                (reasons if self.health_failures >= 5 or self.phase != 'READY' else degraded).append('HARDWARE_HEALTH_STALE')
             if not all(report[name] for name in ('reader_alive', 'writer_alive', 'event_worker_alive')):
                 reasons.append('WORKER_STOPPED')
         if self.fault:
             reasons.append('FAULT_LATCHED')
         if self.audio and self.configuration()['AUDIO_ENABLED'] == '1' and not self.audio.enabled:
             degraded.append('AUDIO_UNAVAILABLE')
+        if self.health_failures and self.health_failures < 5:
+            degraded.append('HEALTH_RETRY_PENDING')
         ready = not reasons and self.phase == 'READY' and not self.maintenance
         return {'status': 'ok' if ready else 'maintenance' if self.maintenance and not reasons else 'fault',
                 'ready': ready, 'phase': self.phase, 'maintenance': self.maintenance, 'reasons': reasons, 'degraded': degraded, 'fault': self.fault}
+
+    def _hardware_healthy(self, report):
+        hardware = report.get('hardware_health')
+        return bool(hardware and hardware['mcp_ready'] and hardware['sensor_mask'] == 31
+                    and hardware['lease_enabled'] and report.get('health_command_status') in (None, 'OK')
+                    and report.get('health_age_seconds') is not None and report['health_age_seconds'] <= 20)
+
+    def _poll_health(self, now):
+        if self.phase not in ('READY', 'MAINTENANCE', 'FAULT'):
+            return
+        if self._health_probe is not None:
+            receipt = self.arduino.command_receipts(self._health_probe)
+            if receipt and receipt['status'] not in ('QUEUED', 'SENT'):
+                self._health_probe = None
+                report = self.arduino.get_diagnostics()
+                self._last_probe_report = report.get('hardware_health')
+                if receipt['status'] == 'OK' and self._hardware_healthy(report):
+                    self.health_failures = 0
+                    self.health_retry_at = now + 10
+                else:
+                    self.health_failures += 1
+                    self.health_retry_at = now + 3
+                    self.record_error(f'Health check failed ({self.health_failures}/5): {self._last_probe_report}')
+                    if self.health_failures >= 5 and self.phase == 'READY':
+                        self.latch_fault('Required hardware lost after 5 consecutive health failures')
+                        if not self._repair_queued:
+                            self._repair_queued = True
+                            self.submit('repair_hardware', {})
+        if self._health_probe is None and now >= self.health_retry_at:
+            receipt = self.arduino.submit_command('HEALTH', origin='health', quiet=True)
+            self._health_probe = receipt['id']
+            self.last_probe = now
+
+    def _flash_fault(self, now):
+        if self.phase not in ('FAULT', 'RECOVERING') or now < self._next_fault_flash:
+            return
+        commands = getattr(self.arduino, 'command_queue', None)
+        if commands is not None and commands.unfinished_tasks:
+            return
+        self._fault_red = not self._fault_red
+        color = '255 0 0' if self._fault_red else '0 0 0'
+        for mole in range(5):
+            self.arduino.submit_command(f'LIGHT {mole} {color}', origin='fault', quiet=True)
+        self.arduino.submit_command(f'PLAYER_LIGHTS {color}', origin='fault', quiet=True)
+        self._next_fault_flash = now + 0.5
 
     def tick(self):
         controller = self.arduino
@@ -312,9 +452,8 @@ class Cabinet:
                 if now - self.last_keepalive >= 1:
                     controller.submit_command('KEEPALIVE', origin='health', quiet=True)
                     self.last_keepalive = now
-                if now - self.last_probe >= 3:
-                    controller.submit_command('HEALTH', origin='health', quiet=True)
-                    self.last_probe = now
+                self._poll_health(now)
+                self._flash_fault(now)
             except RuntimeError as error:
                 self.latch_fault(str(error))
             if controller.event_failure or controller._command_failure:
@@ -361,6 +500,8 @@ class Cabinet:
                 'operation_queue_depth': self.actions.qsize(),
                 'control_worker_alive': bool(self.worker and self.worker.is_alive()),
                 'pending_admin_restore': self.pending_admin_state is not None,
+                'health_monitor': {'normal_interval_seconds': 10, 'retry_interval_seconds': 3, 'failure_limit': 5, 'consecutive_failures': self.health_failures, 'probe_pending': self._health_probe is not None, 'last_hardware_report': self._last_probe_report},
+                'hardware_recovery': self.hardware_recovery,
                 'fault_history': read_json(self.state_directory / 'fault-history.json') or []}
 
     def close(self):
