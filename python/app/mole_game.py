@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from .bugs import BUGS, Color
 from .game import calculate_whack_order
 from .state_log import StateLog
+from .hit_history import HitHistory
 from pathlib import Path
 from .audio_cues import SilentAudio
 
@@ -357,6 +358,9 @@ class MoleGame:
         self.persistence_error = None
         log_path = state_log_path or (Path(state_path).with_name('game-events.jsonl') if state_path else None)
         self.state_log = StateLog(log_path)
+        self.hit_history = HitHistory(Path(log_path).with_name('hit-history.jsonl') if log_path else None,
+                                      self.state_log.session_id)
+        self._capture_scores = None
         self.log_state('SESSION_STARTED_FRESH')
 
     def log_state(self, event):
@@ -1346,7 +1350,9 @@ class MoleGame:
                 for line, received_at in self.arduino.read_captured_samples():
                     if line.startswith("TICKET_"):
                         self._handle_ticket_event(line)
-                    # Strike samples are ignored in both celebration modes.
+                    elif line.startswith(('SCORES ', 'HIT ', 'IMPACT_REJECTED', 'ACCEL ')):
+                        self._handle_arduino_event(line, received_at)
+                    # Strike samples are recorded but never scored during shows.
                 moved = False
                 ready = [] if victory else [mole for mole, ready_at in pending.items() if now >= ready_at]
                 for mole in ready:
@@ -1699,9 +1705,23 @@ class MoleGame:
         if line.startswith("TICKET_"):
             self.log_state("TICKET_PROGRESS")
 
+    def _record_hit_observation(self, line, received_at, decision, reason=None, mole=None, mux=None, strength=None):
+        expected = (self.state.whack_order[self.state.hit_progress]
+                    if self.state.active_player and self.state.hit_progress < len(self.state.whack_order) else None)
+        capture = self._capture_scores
+        self._capture_scores = None
+        self.hit_history.record({
+            'active_player': self.state.active_player, 'hit_progress': self.state.hit_progress,
+            'expected': {'mole': expected, 'sensor': MOLE_ID_BY_NAME.get(expected)},
+            'resolved': {'sensor': mole, 'mole': MOLE_BY_ID.get(mole), 'mux_channel': mux, 'strength': strength},
+            'decision': decision, 'reason': reason, 'received_at_monotonic': received_at,
+            'arduino': {'raw': line, 'capture': capture},
+        })
+
     def handle_arduino_event(self, line, received_at=None):
         with self._event_lock:
-            if not self._stopping and self.persistence_error is None:
+            if (line.startswith(('SCORES ', 'HIT ', 'IMPACT_REJECTED', 'ACCEL '))
+                    or (not self._stopping and self.persistence_error is None)):
                 self._handle_arduino_event(line, received_at)
 
     def _handle_arduino_event(
@@ -1710,6 +1730,16 @@ class MoleGame:
         received_at=None,
     ):
 
+        if line.startswith('SCORES '):
+            try:
+                scores = {int(pair.split(':')[0]): int(pair.split(':')[1]) for pair in line.split()[1:]}
+            except (ValueError, IndexError):
+                scores = None
+            self._capture_scores = {'raw': line, 'scores': scores, 'received_at_monotonic': received_at}
+            return
+        if line.startswith('IMPACT_REJECTED'):
+            self._record_hit_observation(line, received_at, 'REJECTED', 'arduino_rejected_capture')
+            return
         if line.startswith("TICKET_"):
             self._handle_ticket_event(line)
             return
@@ -1760,7 +1790,9 @@ class MoleGame:
                 values = [int(value) for value in parts[1:]]
             except ValueError:
                 return
-            self.handle_accel(*values, received_at=received_at)
+            self._record_hit_observation(line, received_at, 'RAW_SAMPLE', mole=values[0], mux=values[1])
+            if not self._stopping and self.persistence_error is None:
+                self.handle_accel(*values, received_at=received_at)
             return
 
         # ----------------------------------------------------
@@ -1769,48 +1801,33 @@ class MoleGame:
         # HIT <mole> <sensor channel> <strength>
         # ----------------------------------------------------
 
-        if (
-            parts[0] == "HIT"
-            and
-            len(parts) >= 4
-        ):
-            if received_at is not None and received_at <= self._accept_samples_after:
-                return
-
+        if parts[0] == "HIT":
             try:
-
-                mole_id = int(
-                    parts[1]
-                )
-
-                sensor_channel = int(
-                    parts[2]
-                )
-
-                strength = int(
-                    parts[3]
-                )
-
+                mole_id, sensor_channel, strength = map(int, parts[1:4])
             except ValueError:
-
-                print(
-                    f"Bad HIT event: {line}"
-                )
-
+                self._record_hit_observation(line, received_at, 'IGNORED', 'malformed_hit')
                 return
-
-
-            if self.SENSOR_CHANNELS.get(mole_id) != sensor_channel or not 1 <= strength <= 65535:
-                return
-            # Continuous V1 sensing can report ringing from a completed target.
-            if MOLE_BY_ID[mole_id] in self.state.whack_order[:self.state.hit_progress]:
-                return
-            self.handle_hit(
-                mole_id,
-                sensor_channel,
-                strength,
-            )
-
+            reason = None
+            if self._stopping or self.persistence_error is not None:
+                reason = 'game_stopped'
+            elif self._show_active:
+                reason = 'show_active'
+            elif received_at is not None and received_at <= self._accept_samples_after:
+                reason = 'stale_event'
+            elif self.SENSOR_CHANNELS.get(mole_id) != sensor_channel or not 1 <= strength <= 65535:
+                reason = 'invalid_sensor_mapping_or_strength'
+            elif MOLE_BY_ID[mole_id] in self.state.whack_order[:self.state.hit_progress]:
+                reason = 'target_already_completed'
+            elif self.state.locked:
+                reason = 'game_locked'
+            elif self.state.active_player is None or self.state.hit_progress >= len(self.state.whack_order):
+                reason = 'no_active_target'
+            expected = (self.state.whack_order[self.state.hit_progress]
+                        if self.state.active_player and self.state.hit_progress < len(self.state.whack_order) else None)
+            decision = 'IGNORED' if reason else 'CORRECT' if MOLE_BY_ID[mole_id] == expected else 'WRONG'
+            self._record_hit_observation(line, received_at, decision, reason, mole_id, sensor_channel, strength)
+            if reason is None:
+                self.handle_hit(mole_id, sensor_channel, strength)
             return
 
 

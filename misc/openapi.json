@@ -2260,6 +2260,32 @@
           }
         }
       }
+    },
+    "/game/hits": {
+      "get": {
+        "operationId": "get_game_hits",
+        "summary": "Expected and resolved hit history with raw Arduino data and current sensor health",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Oldest-to-newest retained hit observations; current sensor zero-reading flags and bounded raw Arduino lines. New history persists across restarts; prior logs are not backfilled."
+          },
+          "400": {
+            "description": "Invalid limit"
+          }
+        }
+      }
     }
   },
   "components": {

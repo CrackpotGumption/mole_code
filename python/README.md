@@ -436,3 +436,17 @@ for 19 seconds; its seven-ticket request is issued once.
 The updated host launcher does not pass VICTORY_SECONDS. Victory timing belongs
 to application settings (19-second default). There is no victory timing migration or compatibility path. Explicit saved app
 settings are honored; host environment variables do not control victory duration.
+
+Hit history (app 3.2.32): GET /game/hits?limit=100 returns hits, current sensors,
+controller_session_id, arduino_recent_lines and history_error. Limit is 1..1000.
+Each hit has timestamp, game session_id, active_player, hit_progress, expected
+(mole/sensor), resolved (mole/sensor/mux_channel/strength), decision, reason,
+received_at_monotonic and arduino (raw report plus preceding SCORES capture).
+Decision is CORRECT, WRONG, REJECTED, IGNORED or RAW_SAMPLE; it describes the
+software decision, not independent proof of the physically struck mole.
+New observations persist in hit-history.jsonl with the same bounded rotation
+as game events. Existing logs are not backfilled. Raw debug telemetry is included
+from the bounded serial ring without being routed through the gameplay queue.
+Current sensor snapshots include consecutive_zero_health_samples and
+suspicious_zero_readings. Repeated all-zero XYZ is suspicious even when I2C
+transactions succeed. The endpoint does not change game state or hardware.

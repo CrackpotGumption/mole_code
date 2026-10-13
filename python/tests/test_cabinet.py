@@ -58,6 +58,32 @@ class CabinetTests(unittest.TestCase):
         waiting = patch.object(self.stopped, 'wait', return_value=False)
         waiting.start()
         self.addCleanup(waiting.stop)
+    def test_combined_hit_history_http_and_invalid_limit(self):
+        self.connect()
+        self.cabinet.game.handle_rfid('001')
+        expected = self.cabinet.game.state.whack_order[0]
+        from app.mole_game import MOLE_ID_BY_NAME
+        mole = MOLE_ID_BY_NAME[expected]
+        self.cabinet.game.handle_arduino_event('SCORES 0:100 1:200 2:15000 3:400 4:0')
+        self.cabinet.game.handle_arduino_event(f'HIT {mole} {mole} 15000')
+        service = StatusService(self.cabinet, host='127.0.0.1', port=0)
+        service.start()
+        self.addCleanup(service.stop)
+        connection = http.client.HTTPConnection('127.0.0.1', service.server.server_port, timeout=2)
+        self.addCleanup(connection.close)
+        connection.request('GET', '/game/hits?limit=1')
+        response = connection.getresponse()
+        self.assertEqual(response.status, 200)
+        body = json.loads(response.read())
+        self.assertEqual(body['hits'][0]['expected']['mole'], expected)
+        self.assertEqual(body['hits'][0]['resolved']['mole'], expected)
+        self.assertEqual(body['hits'][0]['decision'], 'CORRECT')
+        self.assertIn('sensors', body)
+        connection.request('GET', '/game/hits?limit=0')
+        response = connection.getresponse()
+        self.assertEqual(response.status, 400)
+        response.read()
+
     def test_hardware_messages_identify_sensor_and_where_to_check(self):
         report = {'mcp_ready': True, 'sensor_mask': 29, 'rfid_ready': True, 'lease_enabled': False}
         message = hardware_guidance(report, require_lease=True)

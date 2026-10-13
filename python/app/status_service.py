@@ -11,7 +11,7 @@ from app.host_bridge import request as host_request
 
 ROUTES = {
     'GET': ['/health', '/state', '/diagnostics', '/commands', '/commands/{id}',
-            '/operations', '/operations/{id}', '/configuration', '/firmware', '/host', '/logs', '/host/jobs', '/host/configuration', '/host/packages', '/audio', '/game/events', '/api'],
+            '/operations', '/operations/{id}', '/configuration', '/firmware', '/host', '/logs', '/host/jobs', '/host/configuration', '/host/packages', '/audio', '/game/events', '/game/hits', '/api'],
     'POST': ['/serial', '/maintenance', '/resume', '/recover', '/game/badge', '/game/reset', '/game/restore',
              '/configuration', '/firmware/retry', '/host/actions', '/audio'],
 }
@@ -151,6 +151,9 @@ class StatusService:
                         self.json_response(200, service.game.get_diagnostics() if runtime else diagnostics(service.game, service.started_at))
                     elif path in ('/host', '/logs', '/host/jobs', '/host/configuration', '/host/packages'):
                         self.json_response(200, host_request('GET', {'/host/jobs': '/jobs', '/host/configuration': '/configuration', '/host/packages': '/packages'}.get(path, path) + ('?' + urlsplit(self.path).query if path == '/logs' and urlsplit(self.path).query else '')))
+                    elif path == '/game/hits' and runtime:
+                        limit = int(parse_qs(urlsplit(self.path).query).get('limit', ['100'])[0])
+                        self.json_response(200, service.game.get_hit_history(limit))
                     elif path == '/game/events' and runtime:
                         limit = int(parse_qs(urlsplit(self.path).query).get('limit', ['100'])[0])
                         from app.state_log import StateLog

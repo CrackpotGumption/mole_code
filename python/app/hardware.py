@@ -452,12 +452,12 @@ class ArduinoController:
 
 
     def _queue_event(self, text, received_at):
-        if not text.startswith(("RFID ", "ACCEL ", "HIT ", "MOTION_HIT ", "TICKET_")):
+        if not text.startswith(("RFID ", "ACCEL ", "HIT ", "MOTION_HIT ", "TICKET_", "SCORES ", "IMPACT_REJECTED")):
             return
         with self._capture_lock:
             if self._sensor_capture and text.startswith("TICKET_"):
                 self._captured_ticket_events.put_nowait((text, received_at))
-            elif self._sensor_capture and text.startswith(("ACCEL ", "HIT ", "MOTION_HIT ")):
+            elif self._sensor_capture and text.startswith(("ACCEL ", "HIT ", "MOTION_HIT ", "SCORES ", "IMPACT_REJECTED")):
                 if self._captured_samples.full():
                     try:
                         self._captured_samples.get_nowait()

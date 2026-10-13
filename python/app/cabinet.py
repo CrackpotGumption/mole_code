@@ -632,6 +632,18 @@ class Cabinet:
             except Exception as error:
                 self.latch_fault(str(error))
 
+    def get_hit_history(self, limit=100):
+        from .hit_history import HitHistory
+        history = self.game.hit_history if self.game else HitHistory(self.state_directory / 'hit-history.jsonl')
+        serial = self.arduino.get_diagnostics() if self.arduino else {}
+        prefixes = ('SCORES ', 'HIT ', 'IMPACT_REJECTED', 'ACCEL ', 'MOTION_HIT ', 'HIT_DEBUG ', 'HIT_TRACE ', 'PUZZLE_DIAG ')
+        return {'hits': history.events(limit), 'sensors': serial.get('sensors', {}),
+                'controller_session_id': serial.get('session_id'),
+                'arduino_recent_lines': [entry for entry in serial.get('recent_serial_lines', [])
+                                         if entry.get('line', '').startswith(prefixes)],
+                'history_error': history.log.error,
+                'order': 'oldest_to_newest', 'limit': limit}
+
     def get_state_dict(self):
         state = self.game.get_state_dict() if self.game else {'status': 'UNAVAILABLE', 'solve_state': None, 'completed_players': [], 'active_player': None,
                                                             'hit_progress': 0, 'ticket_dispensed': False, 'tickets_dispensed': 0}

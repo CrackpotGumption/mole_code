@@ -373,3 +373,17 @@ hardware is fault-free; inspect status=warn, warning and degraded fields.
 Serial loss, missing command ACKs, stopped workers and execution/persistence
 errors retain their stop/fault behavior. Firmware lease/watchdog remain enabled.
 Polling and firmware are unchanged.
+
+Hit history (app 3.2.32): GET /game/hits?limit=100 returns hits, current sensors,
+controller_session_id, arduino_recent_lines and history_error. Limit is 1..1000.
+Each hit has timestamp, game session_id, active_player, hit_progress, expected
+(mole/sensor), resolved (mole/sensor/mux_channel/strength), decision, reason,
+received_at_monotonic and arduino (raw report plus preceding SCORES capture).
+Decision is CORRECT, WRONG, REJECTED, IGNORED or RAW_SAMPLE; it describes the
+software decision, not independent proof of the physically struck mole.
+New observations persist in hit-history.jsonl with the same bounded rotation
+as game events. Existing logs are not backfilled. Raw debug telemetry is included
+from the bounded serial ring without being routed through the gameplay queue.
+Current sensor snapshots include consecutive_zero_health_samples and
+suspicious_zero_readings. Repeated all-zero XYZ is suspicious even when I2C
+transactions succeed. The endpoint does not change game state or hardware.
