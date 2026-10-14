@@ -24,7 +24,7 @@ Prices are intentionally omitted; current pricing has not been verified. Dimensi
 | 16-mm bore x 75-mm stroke double-acting cylinders | 5 | VERIFY rod/bottom threads and ports |
 | 12V pneumatic directional valves | 5 | Historical 4V210-08, VERIFY actual installed |
 | Exhaust flow controls | 10 | Two per valve, one per exhaust |
-| 6-connection manifold | 1 | 1 inlet + 5 outlets: https://www.amazon.com/dp/B0FCYNYHQF?tag=crackpotgumpt-20 |
+| 6-connection manifold | 1 | 1 inlet + 5 outlets: https://www.amazon.com/dp/B0FCYNYHQF?tag=crackpotgum00-20 |
 | 1/4-in pneumatic tubing | sufficient | Compressor-manifold, 5 manifold-valve, 10 valve-cylinder runs |
 | Push-to-connect fittings / thread adapters | as required | Match valves/cylinders, VERIFY threads and fitting counts |
 | Quiet air compressor | 1 | Approx. 2 SCFM at 90 PSI; tool regulator to ~25 PSI |
@@ -39,13 +39,13 @@ Prices are intentionally omitted; current pricing has not been verified. Dimensi
 | #8 x 1-in countersunk screws | at least 40 | 4 per puck and 4 per base x 5, plus spares |
 | Captured hex nuts | 10 | Two per cylinder, VERIFY thread and dimensions |
 | NeoPixel strip | >=100 LEDs | Adafruit #1460 https://www.adafruit.com/product/1460 |
-| MPU6050 breakout accelerometers | 5 | https://www.amazon.com/dp/B0F9DLNHTB?tag=crackpotgumpt-20 ; verify board 5V input and I2C levels |
+| MPU6050 breakout accelerometers | 5 | https://www.amazon.com/dp/B0F9DLNHTB?tag=crackpotgum00-20 ; verify board 5V input and I2C levels |
 | TCA9548A I2C multiplexer | 1 | 8-channel, use 0-4 |
 | Arduino Mega | 1 | USB power/serial from host |
 | Adafruit #6318 I2C 8-channel solenoid driver | 1 | Integrated expander/MOSFET/flyback |
-| 5V 10A power supply | 1 | https://www.amazon.com/dp/B0D76F4W1C?tag=crackpotgumpt-20 |
-| 12V 5A power supply | 1 | https://www.amazon.com/dp/B07GFFG1BQ?tag=crackpotgumpt-20 |
-| Screw-down power distribution blocks | 5 | Master 5V 6-way, master 12V 6-way, master GND 12-way, deck 5V 12-way, deck GND 12-way; https://www.amazon.com/dp/B07CLW5FPS?tag=crackpotgumpt-20 |
+| 5V 10A power supply | 1 | https://www.amazon.com/dp/B0D76F4W1C?tag=crackpotgum00-20 |
+| 12V 5A power supply | 1 | https://www.amazon.com/dp/B07GFFG1BQ?tag=crackpotgum00-20 |
+| Screw-down power distribution blocks | 5 | Master 5V 6-way, master 12V 6-way, master GND 12-way, deck 5V 12-way, deck GND 12-way; https://www.amazon.com/dp/B07CLW5FPS?tag=crackpotgum00-20 |
 | Wire, terminals, ferrules, lever nuts | as required | 18AWG deck feeders; 18-22AWG LED wires; other runs per load/length and safe sizing |
 | Normally-open momentary Start button | 1 | Mount in original RFID front-panel area, diameter TBD |
 | Linux PC, USB cable, speakers | 1 each | Small form factor PC, Linux Mint + Docker + systemd |
@@ -117,7 +117,7 @@ TOOLS: saw/jigsaw, drill and countersink, pocket-hole jig, suitable driver inclu
 ## Step 7: Pneumatics
 
 - Five **12 V** directional solenoid valves (historical 4V210-08, exact installed SKU VERIFY), mounted in **lower right chamber** under deck (rear view). Each has **two adjustable flow controls on exhaust ports** to tune extend/retract speed, 10 total.
-- Separate **six-connection manifold**, **one compressor inlet and five valve outlets**, product reference https://www.amazon.com/dp/B0FCYNYHQF?tag=crackpotgumpt-20 .
+- Separate **six-connection manifold**, **one compressor inlet and five valve outlets**, product reference https://www.amazon.com/dp/B0FCYNYHQF?tag=crackpotgum00-20 .
 - **1/4-in air tubing everywhere**: compressor to manifold, manifold to each valve, two lines from each valve to cylinder. Solenoid/port threads and push-fit adapters need physical verification.
 - Compressor: quiet ~**2 SCFM at 90 PSI**, approximately **40 lb**, placed on factory feet on **left cabinet floor**. Regulate to approximately **25 PSI** using compressor's tool-outlet regulator; no second in-cabinet regulator. Alternative source should maintain about **30 PSI** under operating load.
 - Threaded pneumatic connections used PTFE plumber's tape where appropriate, **not exhaust controls**; apply sealant only to compatible threads, follow manufacturer's guidance. Leak check with soap solution, sound and pressure drop. Never use tape on push-fit tubing to compensate for damaged fittings; cut tubing square and replace defective fittings.
@@ -134,11 +134,11 @@ TOOLS: saw/jigsaw, drill and countersink, pocket-hole jig, suitable driver inclu
 
 ## Step 9: Electrical and computer
 
-- Arduino Mega connected to Linux host by USB, serial **115200**, **USB is Arduino's only power source**. Separate dedicated **5 V 10 A** supply https://www.amazon.com/dp/B0D76F4W1C?tag=crackpotgumpt-20 for NeoPixels, accelerometers, mux and solenoid-driver logic; separate dedicated **12 V 5 A** supply https://www.amazon.com/dp/B07GFFG1BQ?tag=crackpotgumpt-20 for valves and optional ticket dispenser. **Common grounds** among Arduino/5V/12V, positives not tied together.
+- Arduino Mega connected to Linux host by USB, serial **115200**, **USB is Arduino's only power source**. Separate dedicated **5 V 10 A** supply https://www.amazon.com/dp/B0D76F4W1C?tag=crackpotgum00-20 for NeoPixels, accelerometers, mux and solenoid-driver logic; separate dedicated **12 V 5 A** supply https://www.amazon.com/dp/B07GFFG1BQ?tag=crackpotgum00-20 for valves and optional ticket dispenser. **Common grounds** among Arduino/5V/12V, positives not tied together.
 - **Adafruit #6318 I2C 8-channel solenoid driver**, includes MCP23017 outputs, MOSFETs and flyback protection. Arduino Mega I2C pins SDA/SCL are 20/21 (also duplicated dedicated SDA/SCL header). No separate external MOSFET board needed.
-- **TCA9548A 8-channel I2C multiplexer** for five MPU6050 boards, one on each channels **0-4**. MPU6050 product reference https://www.amazon.com/dp/B0F9DLNHTB?tag=crackpotgumpt-20 . Verify breakout voltage compatibility and I2C pullups before final wiring. Each accelerometer mounted identically; **MPU Y axis is physical vertical**.
+- **TCA9548A 8-channel I2C multiplexer** for five MPU6050 boards, one on each channels **0-4**. MPU6050 product reference https://www.amazon.com/dp/B0F9DLNHTB?tag=crackpotgum00-20 . Verify breakout voltage compatibility and I2C pullups before final wiring. Each accelerometer mounted identically; **MPU Y axis is physical vertical**.
 - Mega + driver screwed/hot glued to PLA panel, panel double-sided taped to small-form-factor Linux PC case. TCA9548A on separate PLA plate hot-glued to right side of deck near access.
-- Distribution blocks https://www.amazon.com/dp/B07CLW5FPS?tag=crackpotgumpt-20 screwed into framing: 6-channel master 5V, 6-channel master 12V, 12-channel master GND, 12-channel local deck 5V, 12-channel local deck GND. 18-AWG feeders to deck power buses. As-built no extra inline branch fuses; **recommend correctly rated branch fusing and safe enclosed mains wiring**.
+- Distribution blocks https://www.amazon.com/dp/B07CLW5FPS?tag=crackpotgum00-20 screwed into framing: 6-channel master 5V, 6-channel master 12V, 12-channel master GND, 12-channel local deck 5V, 12-channel local deck GND. 18-AWG feeders to deck power buses. As-built no extra inline branch fuses; **recommend correctly rated branch fusing and safe enclosed mains wiring**.
 - SFF PC on factory feet on right floor, next to electronics; 5V/12V supplies were loose as-built, **recommend securing for transport**. USB speakers double-sided taped inside deck. Rear felt cover Velcro. No dedicated cabinet fan; ran ~4-5h in AC environment without observed overheating; verify thermal performance in new environments.
 - **Two separate external AC cords**: compressor direct to appropriately rated mains outlet, electronics to internal power strip. Never propose compressor on electronics strip. Avoid unsafe exposed mains terminals, use strain relief, approved enclosures, and qualified installation if needed.
 - Linux Mint PC with Docker, systemd autostart, BIOS/UEFI restore-on-AC-power; automatically launches software into idle rainbow. Recommend graceful OS shutdown rather than simply cutting power.

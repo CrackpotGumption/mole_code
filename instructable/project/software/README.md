@@ -1,12 +1,14 @@
 # Standalone software setup
 
+Licensed under MIT. Copyright (c) 2026 crackpotgumption. See LICENSE; third-party libraries retain their own licenses.
+
 These files run the standalone Start-button game. Calibration reports measurements without preset reference advice.
 
 **Not yet cabinet-validated. Both sketches compiled successfully. Standalone Arduino sketch compiled successfully for arduino:avr:mega using the Arduino IDE bundled CLI (14,452 bytes flash; 801 bytes RAM). Do not claim publication-ready hardware reliability.**
 
 ## Wiring assumptions
 
-Mega USB power only; rings D14..D18, driver outputs 0..4, sensor mux channels 0..4; MCP 0x20, mux 0x70, sensors 0x68. `PIXELS=20`; confirm the actual number of installed LEDs before use. Proposed Start pin D24/GND with INPUT_PULLUP; verify unused harness. LOW outputs mean de-energized; verify plumbing/direction under controlled conditions. Breakout voltage/pullups and coil power paths still need manufacturer/physical verification.
+Mega USB power only; rings D14..D18, driver outputs 0..4, sensor mux channels 0..4; MCP 0x20, mux 0x70, sensors 0x68. `PIXELS=19`; the builder confirms 19 LEDs per collar. Start pin D24/GND with INPUT_PULLUP. LOW outputs mean de-energized; verify plumbing/direction under controlled conditions. Breakout voltage/pullups and coil power paths still need manufacturer/physical verification.
 
 ## Installation
 

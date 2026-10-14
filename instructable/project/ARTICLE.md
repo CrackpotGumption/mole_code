@@ -1,5 +1,7 @@
 # Build a Customizable Pneumatic Whack-a-Mole Arcade Cabinet
 
+The standalone software is licensed under MIT. The creator's print files, article, diagrams and build photographs are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Credit crackpotgumption, link to the license and indicate changes. See LICENSES.txt for the software license and scope. Third-party materials retain their own terms.
+
 This is a five-target pneumatic whack-a-mole cabinet. Each target uses a double-acting air cylinder, an accelerometer and an illuminated collar. An Arduino Mega controls the hardware, and a Linux computer runs the standalone game and audio.
 
 The mechanisms are mounted on a separate deck for alignment and maintenance. Printed adapters allow the decorations to be changed without rebuilding the mechanism.
@@ -10,88 +12,108 @@ The cabinet measures 37.5 inches wide × 24 inches deep × 36 inches high, exclu
 
 ## Supplies
 
-
 *Amazon links are affiliate links. As an Amazon Associate I earn from qualifying purchases.*
 
 Quantities below describe one cabinet. Pack sizes and spool/tube lengths describe the linked purchase, not the amount required. Prices are omitted.
 
 ## Cabinet
 
+- [Grip-Rite #8 × 2-inch construction screws, 2GCS1](https://www.homedepot.com/p/Grip-Rite-8-x-2-in-Star-Drive-Dual-Flat-Head-Coarse-Thread-Construction-Screws-1-lb-Box-2GCS1/204959257): 2×2-to-plywood connections; also caster fasteners where they enter the inner 2×2 rail.
+- Four [3-inch rubber swivel casters with brakes, Harbor Freight item 61855](https://www.harborfreight.com/3-in-rubber-light-duty-swivel-caster-with-brake-61855.html). Mount about 1 inch in from the corners, catching the inner 2×2 framing on at least one side. Use 2-inch screws into the rail and ¾-inch screws on the other side.
+- Screw-use clarification: 2½-inch screws were used for 2×2-to-2×2 connections; 2-inch screws for 2×2-to-plywood connections. Do not use the 2½-inch frame screws for the plywood connection pattern.
+
+Confirmed ¾-inch plywood cuts: three 36 × 24-inch panels (two sides and top/playfield), one 36 × 23.25-inch bottom, one 36 × 35.25-inch front, and two 19.2 × 35.75-inch deck panels. The bottom's ¾-inch front setback allows the front panel to drop down and align with the sides. See PLYWOOD_CUT_LIST.md; sheet nesting and hole details remain to be drawn.
+
+- Five [Oatey Fast Set flanges, model 435032, 3-inch outside fit / 4-inch inside fit](https://www.homedepot.com/p/Oatey-Fast-Set-3-in-Outside-Fit-or-4-in-Inside-Fit-PVC-Open-Hub-Toilet-Flange-435032/100344482).
+- [Charlotte Pipe 3-inch Schedule 40 PVC, 2-foot purchase length](https://www.homedepot.com/p/Charlotte-Pipe-3-in-x-2-ft-PVC-DWV-Sch-40-Pipe-PVC073000200HA/100533056). Cut five 2-inch sleeves. About one foot including cutting waste is sufficient; buy a shorter length or request store cuts if available.
+- [Everbilt #8 × 1-inch flat-head wood screws, 100-pack](https://www.homedepot.com/p/Everbilt-8-x-1-in-Zinc-Plated-Phillips-Flat-Head-Wood-Screw-100-Pack-801822/204275495): mechanism and flange fastening; at least 40 for puck/base mounts plus flange screws and spares.
+- [Everbilt #8 × ¾-inch flat-head wood screws, 100-pack](https://www.homedepot.com/p/Everbilt-8-x-3-4-in-Phillips-Flat-Head-Zinc-Plated-Wood-Screw-100-Pack-801812/204275494): shorter mounting fasteners; final placement/count to be documented.
+- [Grip-Rite #8 × 2½-inch general-purpose wood screws](https://www.homedepot.com/p/Grip-Rite-8-x-2-1-2-in-2-Phillips-Bugle-Head-Coarse-Thread-Wood-Screws-1-lb-Box-212GS1/100128995): frame joints.
+- [Kreg K4 pocket-hole jig](https://www.amazon.com/dp/B001DYFISG?tag=crackpotgum00-20): one tool.
+- [LIONMAX #8 × 2½-inch pocket-hole screws](https://www.amazon.com/dp/B0C23LJ6LJ?tag=crackpotgum00-20): pocket-hole joints in the nominal 2×2 framing; linked pack contains 300 screws, not the required cabinet quantity.
+- Pneumatic thread tape is supplied with the tubing/solenoid purchases. No separate tape purchase is needed for the documented build; use only on compatible threaded joints.
+
 | Supply | Quantity | Use / remaining check |
 |---|---|---|
-| [ZANEXIR black felt sheet, 36 × 36 inches, 1 mm](https://www.amazon.com/dp/B0GV7ZK5MX?tag=crackpotgumpt-20) | 1 sheet | Trim for the 36 × 34.5-inch rear cover. Confirm stiffness/suitability; listing is 1 mm, not heavy felt. |
+| [ZANEXIR black felt sheet, 36 × 36 inches, 1 mm](https://www.amazon.com/dp/B0GV7ZK5MX?tag=crackpotgum00-20) | 1 sheet | Trim for the 36 × 34.5-inch rear cover. Confirm stiffness/suitability; listing is 1 mm, not heavy felt. |
 
 ## Pneumatics
 
 | Supply | Quantity | Use / remaining check |
 |---|---|---|
-| [TAILONZ MAL16×75 double-acting cylinder, 16 mm bore × 75 mm stroke](https://www.amazon.com/dp/B08CZ39Y42?tag=crackpotgumpt-20) | 5 | Includes fittings listed as 6 mm. The builder confirms these work with the linked ¼-inch tubing in the completed build. Rod/base thread sizes remain to be recorded. |
-| [AIRIX 4V210-08 12 V five-way, two-position valve, ¼-inch NPT](https://www.amazon.com/dp/B0F2MQF6K7?tag=crackpotgumpt-20) | 5 | Listing states 25–116 PSI and pilot operation. Confirm operation at the approximately 25 PSI setting under load; verify physical port markings. |
-| [TAILONZ blue polyurethane air tubing, ¼-inch OD, 200 ft](https://www.amazon.com/dp/B09CPG48SL?tag=crackpotgumpt-20) | As needed | Compressor/manifold/valve/cylinder runs; 200 ft is purchase length, not a one-cabinet requirement. |
-| [TAILONZ straight push fittings, ¼-inch tube OD × ¼-inch MNPT, 20-pack](https://www.amazon.com/dp/B08F4YHR1V?tag=crackpotgumpt-20) | Count after routing | For compatible ¼-inch NPT ports; not assumed to fit cylinder ports. |
+| [TAILONZ MAL16×75 double-acting cylinder, 16 mm bore × 75 mm stroke](https://www.amazon.com/dp/B08CZ39Y42?tag=crackpotgum00-20) | 5 | Includes fittings listed as 6 mm. The builder confirms these work with the linked ¼-inch tubing in the completed build. Rod/base thread sizes remain to be recorded. |
+| [AIRIX 4V210-08 12 V five-way, two-position valve, ¼-inch NPT](https://www.amazon.com/dp/B0F2MQF6K7?tag=crackpotgum00-20) | 5 | Listing states 25–116 PSI and pilot operation. Confirm operation at the approximately 25 PSI setting under load; verify physical port markings. |
+| [TAILONZ blue polyurethane air tubing, ¼-inch OD, 200 ft](https://www.amazon.com/dp/B09CPG48SL?tag=crackpotgum00-20) | As needed | Compressor/manifold/valve/cylinder runs; 200 ft is purchase length, not a one-cabinet requirement. |
+| [TAILONZ straight push fittings, ¼-inch tube OD × ¼-inch MNPT, 20-pack](https://www.amazon.com/dp/B08F4YHR1V?tag=crackpotgum00-20) | Count after routing | For compatible ¼-inch NPT ports; not assumed to fit cylinder ports. |
 
 ## Power and electronics
 
 | Supply | Quantity | Use / remaining check |
 |---|---|---|
-| [Amazon Basics six-outlet surge-protected power strip, 2-pack](https://www.amazon.com/dp/B0D1XNYKD5?tag=crackpotgumpt-20) | 1 strip | Electronics only. Compressor has a separate external cord/outlet. |
-| [12 V 5 A power adapter](https://www.amazon.com/dp/B07GFFG1BQ?tag=crackpotgumpt-20) | 1 | Valve-coil supply; separate from 5 V supply. |
-| [AITRIP TCA9548A eight-channel I²C multiplexer, 6-pack](https://www.amazon.com/dp/B08JGSMRF9?tag=crackpotgumpt-20) | 1 board | Five sensors use channels 0–4; purchase pack contains spares. |
-| [Mega 2560 screw-terminal breakout board](https://www.amazon.com/dp/B0BY8SHQZS?tag=crackpotgumpt-20) | 1 | Controller wiring termination. Check fit against the actual Mega; listing has inconsistent board-compatibility text. |
-| [ELEGOO Mega 2560 R3 board](https://www.amazon.com/dp/B01H4ZDYCE?tag=crackpotgumpt-20) | 1 | Hardware controller, USB-powered by host. |
+| [Amazon Basics six-outlet surge-protected power strip, 2-pack](https://www.amazon.com/dp/B0D1XNYKD5?tag=crackpotgum00-20) | 1 strip | Electronics only. Compressor has a separate external cord/outlet. |
+| [12 V 5 A power adapter](https://www.amazon.com/dp/B07GFFG1BQ?tag=crackpotgum00-20) | 1 | Valve-coil supply; separate from 5 V supply. |
+| [AITRIP TCA9548A eight-channel I²C multiplexer, 6-pack](https://www.amazon.com/dp/B08JGSMRF9?tag=crackpotgum00-20) | 1 board | Five sensors use channels 0–4; purchase pack contains spares. |
+| [Mega 2560 screw-terminal breakout board](https://www.amazon.com/dp/B0BY8SHQZS?tag=crackpotgum00-20) | 1 | Controller wiring termination. Check fit against the actual Mega; listing has inconsistent board-compatibility text. |
+| [ELEGOO Mega 2560 R3 board](https://www.amazon.com/dp/B01H4ZDYCE?tag=crackpotgum00-20) | 1 | Hardware controller, USB-powered by host. |
 
 ## Wiring
 
+- [18 AWG feeder wire](https://www.amazon.com/dp/B07FMWNF3J?tag=crackpotgum00-20), as needed for the deck power feeders.
+- The linked Fermerry 22 AWG wire is the builder's general-use wiring; keep the 18 AWG power feeders separate.
+
+- [WAGO 221-412 two-conductor lever connectors](https://www.amazon.com/dp/B00JB3U7Y6?tag=crackpotgum00-20), as needed for harness connections.
+- [Zip-tie mounts](https://www.amazon.com/dp/B09B8NY4SN?tag=crackpotgum00-20), as needed for cable routing and moving-wire management.
+
 | Supply | Quantity | Use / remaining check |
 |---|---|---|
-| [Mini PCB screw-terminal connector assortment, 2.54 mm pitch](https://www.amazon.com/dp/B0FCXV6GT3?tag=crackpotgumpt-20) | As needed | Sensor and low-voltage wiring connections; not the main power-distribution blocks. |
-| [Amazon Basics multicolor electrical tape, 10-pack](https://www.amazon.com/dp/B07YDSNGCT?tag=crackpotgumpt-20) | As needed | Wire labeling and insulation. |
-| [Fermerry 22 AWG silicone stranded wire, six colors, 100 ft each](https://www.amazon.com/dp/B089D3LVYK?tag=crackpotgumpt-20) | As needed | Low-current signal/sensor wiring and suitably sized pigtails; retain larger deck feeders sized for load. |
+| [Mini PCB screw-terminal connector assortment, 2.54 mm pitch](https://www.amazon.com/dp/B0FCXV6GT3?tag=crackpotgum00-20) | As needed | Sensor and low-voltage wiring connections; not the main power-distribution blocks. |
+| [Amazon Basics multicolor electrical tape, 10-pack](https://www.amazon.com/dp/B07YDSNGCT?tag=crackpotgum00-20) | As needed | Wire labeling and insulation. |
+| [Fermerry 22 AWG silicone stranded wire, six colors, 100 ft each](https://www.amazon.com/dp/B089D3LVYK?tag=crackpotgum00-20) | As needed | Low-current signal/sensor wiring and suitably sized pigtails; retain larger deck feeders sized for load. |
 
 ## Printed parts
 
 | Supply | Quantity | Use / remaining check |
 |---|---|---|
-| [ELEGOO black PLA Plus, four 1 kg spools](https://www.amazon.com/dp/B0C7GDB9GQ?tag=crackpotgumpt-20) | As needed | Black structural parts. Generic PLA is the saved slicer profile; material amount is not yet estimated. |
-| [ELEGOO white PLA, four 1 kg spools](https://www.amazon.com/dp/B0BV24RX9Q?tag=crackpotgumpt-20) | As needed | White diffuser rings; select white filament rather than the saved black project color. |
+| [ELEGOO black PLA Plus, four 1 kg spools](https://www.amazon.com/dp/B0C7GDB9GQ?tag=crackpotgum00-20) | As needed | Black structural parts. Generic PLA is the saved slicer profile; material amount is not yet estimated. |
+| [ELEGOO white PLA, four 1 kg spools](https://www.amazon.com/dp/B0BV24RX9Q?tag=crackpotgum00-20) | As needed | White diffuser rings; select white filament rather than the saved black project color. |
 
 ## Finish
 
 | Supply | Quantity | Use / remaining check |
 |---|---|---|
-| [TECKWRAP silver chrome adhesive vinyl, 1 ft × 5 ft](https://www.amazon.com/dp/B07CZCZ4MB?tag=crackpotgumpt-20) | As needed | Cabinet graphics and accents. |
-| [Flutesan silver ¾-inch T-molding, 25 ft](https://www.amazon.com/dp/B0H8YJY3ZR?tag=crackpotgumpt-20) | As needed | Cabinet edge trim; match slot cutter to trim and test on scrap. |
-| [Rust-Oleum Bright Coat chrome spray paint, 11 oz](https://www.amazon.com/dp/B000Z8DGXK?tag=crackpotgumpt-20) | As needed | Chrome finish on printed collars and accents. |
+| [TECKWRAP silver chrome adhesive vinyl, 1 ft × 5 ft](https://www.amazon.com/dp/B07CZCZ4MB?tag=crackpotgum00-20) | As needed | Cabinet graphics and accents. |
+| [Flutesan silver ¾-inch T-molding, 25 ft](https://www.amazon.com/dp/B0H8YJY3ZR?tag=crackpotgum00-20) | As needed | Cabinet edge trim; match slot cutter to trim and test on scrap. |
+| [Rust-Oleum Bright Coat chrome spray paint, 11 oz](https://www.amazon.com/dp/B000Z8DGXK?tag=crackpotgum00-20) | As needed | Chrome finish on printed collars and accents. |
 
 ## Tools and adhesives
 
 | Supply | Quantity | Use / remaining check |
 |---|---|---|
-| [Surebonder CL-800F full-size cordless hot glue gun](https://www.amazon.com/dp/B001AH5EXK?tag=crackpotgumpt-20) | 1 tool | Collar retention and mounting; keep serviceable parts removable. |
-| [Gorilla heavy-duty double-sided mounting tape, 1 × 120 inches](https://www.amazon.com/dp/B082TQ3KB5?tag=crackpotgumpt-20) | As needed | Mounting panels and speakers; consider later removal. |
-| [Self-adjusting ferrule crimper with ferrule assortment](https://www.amazon.com/dp/B0DRJ9CDNG?tag=crackpotgumpt-20) | 1 tool kit | Terminate stranded wires in compatible screw terminals; match ferrule to wire size. |
-| [Oatey PVC cement and purple primer handy pack](https://www.amazon.com/dp/B0002YU23O?tag=crackpotgumpt-20) | 1 kit | Solvent-weld compatible PVC sleeves and closet flanges. |
+| [Surebonder CL-800F full-size cordless hot glue gun](https://www.amazon.com/dp/B001AH5EXK?tag=crackpotgum00-20) | 1 tool | Collar retention and mounting; keep serviceable parts removable. |
+| [Gorilla heavy-duty double-sided mounting tape, 1 × 120 inches](https://www.amazon.com/dp/B082TQ3KB5?tag=crackpotgum00-20) | As needed | Mounting panels and speakers; consider later removal. |
+| [Self-adjusting ferrule crimper with ferrule assortment](https://www.amazon.com/dp/B0DRJ9CDNG?tag=crackpotgum00-20) | 1 tool kit | Terminate stranded wires in compatible screw terminals; match ferrule to wire size. |
+| [Oatey PVC cement and purple primer handy pack](https://www.amazon.com/dp/B0002YU23O?tag=crackpotgum00-20) | 1 kit | Solvent-weld compatible PVC sleeves and closet flanges. |
 
 ## Other required supplies already specified
 
+Pneumatic routing: each valve's default, de-energized state sends air to the top of its associated cylinder. Builder reports no additional pneumatic hardware beyond the linked fittings and cylinder-supplied fittings.
+
 - ¾-inch plywood and nominal 2×2 lumber: use the cabinet/deck cut lists in the build steps.
 - Five compatible closet flanges, five 2-inch sections of nominal 3-inch Schedule 40 PVC, casters, hook-and-loop fastening and wood screws.
-- Ten exhaust flow controls, two per valve; select the correct threads for the installed exhaust ports.
-- One [six-connection manifold](https://www.amazon.com/dp/B0FCYNYHQF?tag=crackpotgumpt-20).
-- Five [MPU6050 breakout boards](https://www.amazon.com/dp/B0F9DLNHTB?tag=crackpotgumpt-20); verify breakout voltage/pullups.
+- Ten [Pneuforce BESL-01 exhaust muffler/flow controls](https://pneuforce.com/pneumatic-exhaust-muffler-besl-01), two per valve. Builder identifies these as the installed parts.
+- One [FORTRESS 2-gallon, 135 PSI ultra-quiet oil-free compressor, Harbor Freight item 64596](https://www.harborfreight.com/2-gallon-135-psi-ultra-quiet-oil-free-hand-carry-jobsite-air-compressor-64596.html). Use its regulated outlet; tank maximum pressure is not the cabinet operating pressure.
+- One [six-connection manifold](https://www.amazon.com/dp/B0FCYNYHQF?tag=crackpotgum00-20).
+- Five [MPU6050 breakout boards](https://www.amazon.com/dp/B0F9DLNHTB?tag=crackpotgum00-20); verify breakout voltage/pullups.
 - One [Adafruit #6318 solenoid driver](https://www.adafruit.com/product/6318).
-- At least 100 pixels from [NeoPixel strip #1460](https://www.adafruit.com/product/1460); verify actual count per collar.
-- One [5 V 10 A supply](https://www.amazon.com/dp/B0D76F4W1C?tag=crackpotgumpt-20), and five [power-distribution blocks](https://www.amazon.com/dp/B07CLW5FPS?tag=crackpotgumpt-20) sized as described in the wiring step.
-- Quiet compressor, Linux PC, USB cable, speakers and normally-open Start button.
+- 95 installed pixels (19 per collar), plus optional spares from [NeoPixel strip #1460](https://www.adafruit.com/product/1460); builder confirms 19 per collar.
+- One [5 V 10 A supply](https://www.amazon.com/dp/B0D76F4W1C?tag=crackpotgum00-20), and five [power-distribution blocks](https://www.amazon.com/dp/B07CLW5FPS?tag=crackpotgum00-20) sized as described in the wiring step.
+- One host computer, for example a [used small-form-factor workstation](https://www.ebay.com/itm/398398540633). The builder used similar computers with varying models; the listing is an example, not an exact required model. It needs USB power and data for the Arduino Mega, USB-speaker or other audio-output support, and the ability to run Python. A Raspberry Pi could also serve as the host. Size and computing power were not selection constraints.
+- One pair of [Logitech S150 USB speakers](https://www.amazon.com/dp/B000ZH98LU?tag=crackpotgum00-20).
+- [Amazon Basics USB-A to USB-B cable](https://www.amazon.com/dp/B00NH13DV2?tag=crackpotgum00-20), optional longer cable for bench testing. The cable included with the Mega can be used in the cabinet.
+- Suggested [Twidec normally-open momentary Start button, 16 mm variant](https://www.amazon.com/dp/B08JHVLK84?tag=crackpotgum00-20), one used from the pack. Suggested for the standalone build, not an identified original button. Measure the received button before drilling. Connect between the Start input and ground using INPUT_PULLUP.
 - Five each of printed body, retainer, guard, cylinder base, collar and diffuser; optional decoration adapters. Use the confirmed production 3MF and preserve its modifier and negative volumes.
-- At least forty #8×1-inch countersunk screws for retainer/base mounts and ten correctly sized captured nuts.
+- At least forty #8×1-inch countersunk screws for retainer/base mounts and ten captured nuts supplied with the linked cylinders; reuse them in the printed mounts rather than buying separate nuts.
 - Black paint, satin water-based clearcoat, optional chrome marker, strain relief, cable mounts and appropriate circuit protection.
-
-## Link format verification
-
-Clean format: `https://www.amazon.com/dp/ASIN?tag=crackpotgumpt-20`. Remove order-history `ref=` and `th=1` navigation parameters; preserve each supplied ASIN. If a URL already has a necessary query parameter, append `&tag=crackpotgumpt-20` instead of a second `?`.
-
-[Amazon’s text-link documentation](https://affiliate-program.amazon.com/help/node/topic/GP38PJ6EUR6PFBEC) uses the `tag` query parameter for the Associate ID. [Amazon’s tagging check](https://affiliate-program.amazon.com/help/node/topic/G6253GFSARDQENZR) describes checking manually constructed links. The URL syntax is verified; account ownership/commission credit was not checked.
 
 ## Step 1: Plan the cabinet and work safely
 
@@ -103,17 +125,19 @@ Use two external cords: compressor directly to a suitable outlet, electronics to
 
 Build the outer frame's approximately 36 × 22.5-inch top and bottom rectangles, with a centered bottom crossmember. Join them using six 31.5-inch uprights at the corners and centers of the long sides. Pocket-screw the short horizontal members; other joints used 2.5-inch screws. Add two interior 36-inch rails about 15 inches below the upper rails for the deck.
 
-Fit the 24 × 36-inch sides, playfield and other panels. The front was approximately 36 × 35.25 inches; verify overlap and bottom geometry before final cutting. I fastened plywood from inside with 2-inch screws and omitted glue for disassembly. A recessed 36 × 34.5-inch felt rear panel attaches with hook-and-loop fastening.
+Cut three 36 × 24-inch plywood panels for the two sides and top/playfield. Cut the bottom 36 × 23.25 inches and the front 36 inches wide × 35.25 inches tall. All are ¾-inch plywood. The bottom is ¾ inch shorter at the front so the front panel can drop down and align with the sides. I fastened plywood from inside with 2-inch screws and omitted glue for disassembly. A recessed 36 × 34.5-inch felt rear panel attaches with hook-and-loop fastening.
 
-Build two nominal 36 × 19.2-inch deck frames with centered 33-inch crossmembers and four short uprights. Fit two ¾-inch plywood sheets, leaving the bottom solid. The top has approximately 4.25-inch flange openings centered at (6,3.75), (18,3.75), (30,3.75), (12,15.75), (24,15.75) inches. Position the deck about 2.25 inches rearward relative to the playfield; leave roughly ¼ inch adjustment until targets align. Screw it to support rails and tie columns together, preserving service gaps.
+Build two nominal 36 × 19.2-inch deck frames with centered 33-inch crossmembers and four short uprights. Fit two 19.2 × 35.75 × ¾-inch plywood panels, leaving the bottom solid. The top has approximately 4.25-inch flange openings centered at (6,3.75), (18,3.75), (30,3.75), (12,15.75), (24,15.75) inches. Center the deck between the cabinet rails. Measure each hole layout from its own panel’s front-left corner; the different depth coordinates account for the different panel origins and align the targets vertically. Screw it to support rails and tie columns together, preserving service gaps.
 
 *Photos: frame pieces, uprights, batch deck assembly and raw cabinet on casters.*
+
+Use 2½-inch screws for 2×2-to-2×2 joints and [Grip-Rite #8 × 2-inch screws](https://www.homedepot.com/p/Grip-Rite-8-x-2-in-Star-Drive-Dual-Flat-Head-Coarse-Thread-Construction-Screws-1-lb-Box-2GCS1/204959257) for 2×2-to-plywood connections. Mount four [Harbor Freight 61855 casters](https://www.harborfreight.com/3-in-rubber-light-duty-swivel-caster-with-brake-61855.html), about 1 inch inset from the corners. Catch the inner 2×2 frame on at least one side: use 2-inch screws into that rail and ¾-inch screws on the other side.
 
 ## Step 3: Assemble the printed mechanisms
 
 The production 3MF contains six build plates and ten objects. Open it as a project so its modifiers and negative volume remain intact. The saved general profile is Bambu P1S, 0.4 mm nozzle, Generic PLA, 0.20 mm layers, three walls, 15% grid infill, five top layers, three bottom layers, supports disabled and automatic brim. Verify these settings for your printer and filament.
 
-The collar plate uses 0.24 mm layers, two walls and 15% zigzag infill. Plate 5 includes a 20% gyroid/five-wall mounting plate, a 10% infill body, and a six-wall piston mount with a 100% infill modifier. Preserve the puck-related negative volume. Select white filament for the diffusers even though the project color is saved as black.
+The collar plate uses 0.24 mm layers, two walls and 15% zigzag infill. On plate 5, object 6 is the cylinder bottom-to-deck mount, capturing the larger supplied hex nut and fastening to plywood through countersunk holes. Object 22 is the rod-to-body mount/retainer puck, capturing the rod hex nut and screwing to the mole body's flat platform; preserve its 100% infill modifier. Object 10 is the main body, with its cylindrical guide inside the 3-inch PVC sleeve and a flat decoration platform on top. Object 15 is the U-channel anti-rotation guard and accelerometer mount; its negative cube provides clearance for the sensor pins. Select white filament for the diffusers even though the project color is saved as black.
 
 Solvent-weld each 2-inch PVC segment into its flange. Fit the flange from above: the rim rests on plywood and the PVC points downward. Secure it with 1-inch screws.
 
@@ -125,7 +149,15 @@ The mechanisms were built in PLA. PETG and TPU have not been validated for these
 
 *Photo: rear deck and mounts. Detailed teardown images remain pending.*
 
+![PHOTO TO ADD: removed target mechanism](photo_placeholders/01_mechanism.png)
+
+![PHOTO TO ADD: accelerometer mount and pin clearance](photo_placeholders/02_sensor_mount.png)
+
 ## Step 4: Plumb the five channels
+
+![PHOTO TO ADD: valve and cylinder connections](photo_placeholders/04_pneumatic_connections.png)
+
+Plumb each valve so its default, de-energized state sends air to the top of its associated cylinder. Air supplied to the top port retracts the piston and lowers the target, while air from the bottom end exhausts through the valve. Energizing the valve supplies air to the bottom port, extending the piston and raising the target while the top end exhausts. The piston positions in the valve-state drawing illustrate these lowered and raised states.
 
 Each target uses one AIRIX 4V210-08 12 V five-way, two-position valve and one TAILONZ MAL16×75 double-acting cylinder. Route regulated compressor air into the manifold, its five branches into the numbered valve supplies, and each valve's two working ports to its cylinder. Verify the physical port labels and extend/retract direction before committing the plumbing. Fit two flow controls to each valve's exhaust ports. The valves sit at the lower right and compressor at the left, viewed from behind.
 
@@ -135,15 +167,19 @@ With the host stopped, upload the piston diagnostic and open Serial Monitor at 1
 
 ## Step 5: Wire sensors, driver and collars
 
+![PHOTO TO ADD: moving wire loop](photo_placeholders/03_moving_wiring.png)
+
 Power the Mega only through computer USB. Keep separate 5 V and 12 V positive rails with common DC ground. Distribute power through master and deck buses, numbered at both ends. Size wires/protection for load and length; secure supplies and enclose mains.
 
 Connect Mega D20/SDA and D21/SCL to driver and mux. Driver outputs and mux channels 0–4 follow target IDs; expected addresses are 0x20, 0x70 and 0x68 respectively. The raw MPU6050 is not 5 V tolerant; verify the actual breakout regulation, pullups and logic levels before wiring.
 
-For Adafruit #6318, logic Vcc follows the Mega's 5 V logic; V+ supplies the 12 V coils. Coils connect between positive terminals and numbered switched outputs with common ground. Verify labels in [Adafruit's pinout guide](https://learn.adafruit.com/adafruit-i2c-to-8-channel-solenoid-driver/pinouts). It already includes the output driver/flyback protection.
+The installed MPU6050 breakout boards also receive VCC from the dedicated 5 V rail. This describes the breakout-board input supply, not the bare MPU6050 chip rating.
+
+Power the Adafruit #6318 logic Vcc and the TCA9548A from the dedicated 5 V rail. The Mega remains USB-powered; do not connect the external 5 V rail to its 5 V pin. Driver V+ supplies the 12 V coils. Coils connect between positive terminals and numbered switched outputs with common ground. Verify labels in [Adafruit's pinout guide](https://learn.adafruit.com/adafruit-i2c-to-8-channel-solenoid-driver/pinouts). The driver includes output drivers and flyback protection.
 
 Seat cut NeoPixel strips in printed collars and gently spring matte-white diffusers into their lips; avoid/stagger seams and keep spares. Data D14–D18 matches rings 0–4. Confirm pixel count/data direction. Follow [Adafruit's power guidance](https://learn.adafruit.com/adafruit-neopixel-uberguide/powering-neopixels), including capacitor/data resistor recommendations; these are review additions rather than documented original components.
 
-Connect a normally-open Start button to an unused input and ground using INPUT_PULLUP. New firmware proposes D24, pending harness confirmation. Keep moving loops away from tubing; verify matching channel/ring/output with air disconnected before pressure tests.
+Connect a normally-open Start button between Mega D24 and ground using INPUT_PULLUP. Keep moving loops away from tubing; verify matching channel/ring/output with air disconnected before pressure tests.
 
 ## Step 6: Finish and customize
 
@@ -159,7 +195,7 @@ Press Start for a short countdown and thirty-second round. Idle collars display 
 
 Download the seven files attached to Step 7 and arrange the Python files in software/python/, test_game.py in software/tests/, and each Arduino sketch in its same-named folder under software/arduino/. Keep standalone_setup.txt with the package.
 
-Use the independent software folder. Upload STANDALONE.ino for Mega with Adafruit NeoPixel, MCP23017 and BusIO libraries. Check the twenty-pixel setting and proposed D24 button pin first. Close Serial Monitor and run the Linux host from its software folder:
+Use the independent software folder. Upload STANDALONE.ino for Mega with Adafruit NeoPixel, MCP23017 and BusIO libraries. Use the nineteen-pixel setting and D24 Start-button pin. Close Serial Monitor and run the Linux host from its software folder:
 
 ```sh
 python3 -m venv .venv
@@ -180,3 +216,20 @@ Test countdown/repeated Start, correct-only one-point scoring, one score per app
 Binding calls for alignment/load/flow checks. False hits call for mount/harness/trace/settling review. Missing channels call for isolated wiring checks. Flicker calls for data direction/count/ground/power checks. Measure temperatures during a full-length run in the actual venue.
 
 Inspect fasteners, guards, decorations, tubes and moving loops after sessions. Keep spare printed parts, shut Linux down gracefully and release stored air before repairs. Remaining publication work is listed in OWNER_TODOS.md: checked cutting dimensions, breakout-specific wiring and pneumatic diagrams, teardown photos, physical calibration and full cabinet validation.
+
+### Testing results — to be completed
+
+DRAFT PLACEHOLDER: add observations and measurements using TESTING_RESULTS_TEMPLATE.md. No cabinet-testing result has been recorded here yet.
+
+| Check | Recorded result |
+|---|---|
+| Date, software version and pressure | [RESULT TO ADD] |
+| Channel mapping and 19-pixel collars | [RESULT TO ADD] |
+| D24 Start button and repeated presses | [RESULT TO ADD] |
+| Motion, wire slack and off-state plumbing | [RESULT TO ADD] |
+| Threshold, settling time and cooldown | [RESULT TO ADD] |
+| False hits from own/neighbor movement | [RESULT TO ADD] |
+| Correct-only, single-hit scoring | [RESULT TO ADD] |
+| Round end and return to idle | [RESULT TO ADD] |
+| USB disconnect/reconnect | [RESULT TO ADD] |
+| Extended run and observed issues | [RESULT TO ADD] |

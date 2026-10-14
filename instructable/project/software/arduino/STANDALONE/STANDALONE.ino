@@ -9,7 +9,7 @@
 uint8_t resetCause __attribute__((section(".noinit")));
 void rememberReset() __attribute__((naked, section(".init3")));
 void rememberReset() { resetCause = MCUSR; MCUSR = 0; wdt_disable(); }
-const uint8_t COUNT=5, PIXELS=20, START_PIN=24;
+const uint8_t COUNT=5, PIXELS=19, START_PIN=24;
 Adafruit_MCP23X17 driver;
 Adafruit_NeoPixel rings[COUNT] = {
   Adafruit_NeoPixel(PIXELS,14,NEO_GRB+NEO_KHZ800),

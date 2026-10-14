@@ -2,7 +2,16 @@
 
 Source: [mole_assembly_final.3mf](../../mole_assembly_final.3mf). Original archive preserved unchanged.
 
-This records saved configuration, not proof of historical print settings or a validated print recommendation. Owner confirms this is the cleaned final production set: all six plates and ten objects are production parts. Physical roles of the four plate-5 meshes still need explicit labeling. No sliced G-code, measured print times or material-use totals are included.
+This records saved configuration, not proof of historical print settings or a validated print recommendation. Owner confirms this is the cleaned final production set: all six plates and ten objects are production parts. The owner identified all four plate-5 roles on October 14, 2026. No sliced G-code, measured print times or material-use totals are included.
+
+## Confirmed plate-5 roles — mole_base_plate
+
+| Object | Filename | Physical role |
+|---|---|---|
+| 6 | MAL16_mounting_plate_test(4).stl 5 2 | Cylinder bottom-to-deck mount. Captures the larger cylinder hex nut and provides countersunk screw holes for fastening to the plywood deck base. |
+| 22 | piston_mount_non_hex_countersinks.stl | Cylinder rod-to-mole-body mount/retainer puck. Captures the piston-rod hex nut and screws to the mole body's flat platform. Preserve its local 100% infill modifier. |
+| 10 | mole_bottom_rebuilt_true_cylinders_73p2mm.stl 3 | Main mole body. Its cylindrical guide remains inside the nominal 3-inch PVC sleeve; the flat top platform accepts decorations. |
+| 15 | pneumatic_mount_4_COUNTERSUNK_UNDERSIDE_PUCK_ONLY_v21.stl | U-channel anti-rotation guard and accelerometer mount. Despite the filename, it is not the puck. The negative cube creates clearance for the sensor pins so they can float freely without interfering with the mount or glue. |
 
 ## Project defaults
 
@@ -26,8 +35,8 @@ This records saved configuration, not proof of historical print settings or a va
 
 ## Corrections to the interview notes
 
-- Saved 100% infill modifier belongs to piston_mount_non_hex_countersinks.stl (object 22), which also has six walls. Confirm the physical role before calling it a puck or cylinder base.
-- pneumatic_mount_4_COUNTERSUNK_UNDERSIDE_PUCK_ONLY_v21.stl (object 15) includes a negative cube. Exporting its unmodified mesh would not reproduce the sliced geometry.
+- Saved 100% infill modifier belongs to the rod-to-body mount (object 22), which also has six walls.
+- The U-channel guard/sensor mount (object 15) includes a negative cube for accelerometer-pin clearance. Exporting its unmodified mesh would not reproduce the sliced geometry.
 - Plate 4’s named football mount has no per-object override: saved settings inherit 15% grid and three walls, rather than the interview’s approximately 20% rectilinear/five walls. Do not equate the current saved project with historical print conditions.
 - MAL16 mounting plate (object 6) explicitly uses 20% gyroid and five walls.
 - Main body object 10 uses 10% infill. Collar object 8 uses 0.24 mm layers, two walls and 15% zig-zag sparse infill.
@@ -35,8 +44,8 @@ This records saved configuration, not proof of historical print settings or a va
 
 ## Next checks
 
-- All plates/objects confirmed production; map the four plate-5 objects to body, puck, anti-rotation guard and cylinder base.
-- Inspect complete assembled fits and verify captured nuts/thread sizes; mesh bounds alone do not determine these.
+- All plates/objects and the four plate-5 physical roles are confirmed by the owner.
+- Inspect assembled fits using the nuts supplied with the linked cylinders, repurposed as captured nuts for the wood/printed mounts. No separate nut purchase is needed.
 - Preserve negative and modifier volumes in any simplified production 3MF.
 - Verify orientations, support needs and actual sliced geometry in Bambu Studio.
 - Release the verified production 3MF first; export STLs only when negative volumes have been applied and modifier requirements are separately documented.
